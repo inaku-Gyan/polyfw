@@ -46,6 +46,25 @@ Cargo validation requires a library and at least one binary, counting feature-ga
 independently of default-run. An omitted bin is resolved for artifact lookup while remaining absent
 from build arguments. Same-named binaries follow Cargo's native output behavior.
 
+## Library boundary
+
+The crate is a library with the executable behind the default `cli` feature. `lib.rs` declares
+every module; `api.rs` is the only public surface, and `app.rs` holds the executable's
+dispatch. The library re-exports `Project`, `Firmware`, `Platform`, `SavedSelection`,
+`Profile` and an opaque `Error`. Its types wrap the private model, so configuration and
+serialization types stay free to change.
+
+`Project` loads through `Context::load`, so it applies the same version preflight, validation
+and Cargo resolution as firmware commands. `Firmware` exposes the resolved Cargo context,
+`runner::firmware_elf_path`, `runner::build_command` and the platform consistency check.
+Selection writes go through `Context::save_selection` and `clear_selection`, keeping the
+editor rollback contract. Library errors keep CLI wording, including suggested commands.
+
+Builders return `std::process::Command`; the library runs only `cargo metadata` and Cargo's
+version query itself. Terminal output, progress, pickers, check stages and probe-rs
+subprocesses stay in the CLI modules (`cli`, `commands`, `ui`, `probe`, `init`). `ui` owns
+`run_command`, so `runner` constructs processes without terminal dependencies.
+
 ## Configuration compatibility
 
 The [configuration guide](configuration.md#configuration-compatibility) owns version declarations,

@@ -67,6 +67,7 @@ pub(crate) fn write_schema(output: Option<&Path>) -> Result<()> {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct Context {
     pub(crate) root: PathBuf,
     pub(crate) registry: Registry,
@@ -550,9 +551,7 @@ mod tests {
 
         let result = Context::load(root.clone());
         fs::remove_dir_all(root).unwrap();
-        let error = result
-            .err()
-            .expect("a binary-only firmware must be rejected");
+        let error = result.expect_err("a binary-only firmware must be rejected");
         assert!(
             error
                 .to_string()
@@ -669,8 +668,7 @@ mod tests {
              package = \"test-firmware\"\n";
         fs::write(root.join(REGISTRY_FILE), source).unwrap();
         let error = Context::load(root.clone())
-            .err()
-            .expect("multiple binaries must require an explicit bin")
+            .expect_err("multiple binaries must require an explicit bin")
             .to_string();
         for expected in [
             "test-firmware",

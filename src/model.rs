@@ -236,7 +236,7 @@ pub(crate) struct MetadataTarget {
     pub(crate) kind: Vec<String>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct Selection {
     pub(crate) id: String,
     pub(crate) firmware: Firmware,

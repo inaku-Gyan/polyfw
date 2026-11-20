@@ -112,6 +112,30 @@ Firmware operations need Cargo and rustup, plus the toolchain, targets, rustfmt 
 required by the consuming project. Flashing and monitoring also need
 [probe-rs](https://probe.rs/docs/getting-started/installation/) on `PATH`.
 
+## Use the library
+
+The `polyfw` crate also provides a Rust library for tools that drive firmware themselves.
+`Project` loads `polyfw.toml`, resolves each firmware through Cargo and reports its probe-rs
+chip, target, Cargo directories and ELF paths. It builds the same `cargo build` command as
+`polyfw build` and reads or saves the selection. The caller runs commands and owns hardware
+sessions. Disable default features to leave out the executable's dependencies:
+
+```toml
+[dependencies]
+polyfw = { version = "0.2", default-features = false }
+```
+
+```rust
+let project = polyfw::Project::discover(".")?;
+let firmware = project.firmware("led-demo")?;
+let release: polyfw::Profile = "release".parse()?;
+let status = firmware.build_command(Some(&release)).status()?;
+let elf = firmware.elf_path(Some(&release));
+let chip = firmware.platform().chip();
+```
+
+The [design guide](docs/design.md#library-boundary) describes what the library covers.
+
 ## Documentation
 
 | Task | Guide |

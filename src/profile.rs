@@ -1,13 +1,19 @@
+use std::fmt;
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+/// A Cargo profile name, such as `dev`, `release` or a custom profile.
+///
+/// Parse one with [`str::parse`]. Names contain only ASCII letters, digits, `_` and `-`,
+/// so a profile directory cannot leave the target directory.
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(try_from = "String")]
-pub(crate) struct Profile(String);
+pub struct Profile(String);
 
 impl Profile {
-    pub(crate) fn name(&self) -> &str {
+    /// The profile name passed to `cargo --profile`.
+    pub fn name(&self) -> &str {
         &self.0
     }
 
@@ -22,8 +28,26 @@ impl Profile {
     }
 }
 
+impl fmt::Display for Profile {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+/// The error for a profile name with characters other than ASCII letters, digits, `_` or `-`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ParseProfileError(());
+
+impl fmt::Display for ParseProfileError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("profile names must contain only letters, digits, '_' or '-'")
+    }
+}
+
+impl std::error::Error for ParseProfileError {}
+
 impl FromStr for Profile {
-    type Err = String;
+    type Err = ParseProfileError;
 
     fn from_str(name: &str) -> Result<Self, Self::Err> {
         name.to_owned().try_into()
@@ -31,7 +55,7 @@ impl FromStr for Profile {
 }
 
 impl TryFrom<String> for Profile {
-    type Error = String;
+    type Error = ParseProfileError;
 
     fn try_from(name: String) -> Result<Self, Self::Error> {
         if name.is_empty()
@@ -39,7 +63,7 @@ impl TryFrom<String> for Profile {
                 .bytes()
                 .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
         {
-            return Err("profile names must contain only letters, digits, '_' or '-'".into());
+            return Err(ParseProfileError(()));
         }
         Ok(Self(name))
     }

@@ -1,6 +1,7 @@
 use std::fmt::Display;
 use std::io::{self, IsTerminal};
 use std::path::Path;
+use std::process::Command;
 use std::time::{Duration, Instant};
 
 use clap::ColorChoice;
@@ -513,6 +514,37 @@ fn format_duration(duration: Duration) -> String {
     }
 }
 
+fn render_command(command: &Command) -> String {
+    std::iter::once(command.get_program())
+        .chain(command.get_args())
+        .map(|argument| argument.to_string_lossy())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+pub(crate) fn run_command(ui: &Ui, mut command: Command) -> io::Result<()> {
+    let rendered = render_command(&command);
+    ui.command(&rendered);
+    let status = command.status()?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(io::Error::other(format!("{rendered} failed with {status}")))
+    }
+}
+
+pub(crate) fn run_command_with_progress(
+    ui: &Ui,
+    progress: &mut Progress<'_>,
+    label: &str,
+    command: Command,
+) -> io::Result<()> {
+    let step = progress.start(label);
+    let result = run_command(ui, command);
+    progress.finish(step, result.is_ok());
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -570,5 +602,43 @@ mod tests {
     fn durations_use_milliseconds_below_one_second() {
         assert_eq!(format_duration(Duration::from_millis(240)), "240ms");
         assert_eq!(format_duration(Duration::from_millis(1_240)), "1.2s");
+    }
+
+    #[test]
+    fn command_runners_preserve_launch_errors_and_failed_exit_statuses() {
+        let ui = Ui::new(ColorChoice::Never);
+        for with_progress in [false, true] {
+            for missing in [false, true] {
+                let mut command = if missing {
+                    Command::new(
+                        std::env::temp_dir()
+                            .join(format!("polyfw-missing-executable-{}", std::process::id())),
+                    )
+                } else {
+                    Command::new("rustc")
+                };
+                command.arg("--polyfw-invalid-argument");
+                let rendered = render_command(&command);
+                let result = if with_progress {
+                    run_command_with_progress(
+                        &ui,
+                        &mut Progress::new(&ui, 1),
+                        "test command",
+                        command,
+                    )
+                } else {
+                    run_command(&ui, command)
+                };
+                let error = result.unwrap_err();
+                if missing {
+                    assert_eq!(error.kind(), io::ErrorKind::NotFound);
+                    assert!(error.raw_os_error().is_some());
+                } else {
+                    assert_eq!(error.kind(), io::ErrorKind::Other);
+                    assert!(error.to_string().contains("failed with"), "{error}");
+                    assert!(error.to_string().starts_with(&rendered), "{error}");
+                }
+            }
+        }
     }
 }

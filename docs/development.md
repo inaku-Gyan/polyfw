@@ -15,8 +15,8 @@ rustup target add thumbv7em-none-eabihf
 just check
 ```
 
-`just check` checks Rust formatting, runs Clippy for all targets with warnings denied, runs the
-Rust tests, and builds a release executable.
+`just check` checks Rust formatting, runs Clippy for all targets with warnings denied, runs
+Clippy on the library without the `cli` feature, and runs the Rust tests.
 
 Use `just --list` for repository recipes. `just fix` formats source and applies Clippy fixes;
 review those changes before committing. The Rust minimum in `Cargo.toml` is the supported compiler
@@ -53,7 +53,8 @@ use the consuming workspaces' pins rather than inheriting the compiler used to r
 
 | Files | Responsibility |
 | --- | --- |
-| `src/main.rs`, `src/cli.rs` | Project-free dispatch, loading boundaries and CLI arguments/help |
+| `src/lib.rs`, `src/api.rs` | Crate root, `cli` feature gating and the public library API |
+| `src/main.rs`, `src/app.rs`, `src/cli.rs` | Executable entry, project-free dispatch, loading boundaries and CLI arguments/help |
 | `src/model.rs`, `src/registry.rs` | Configuration/schema model, root discovery, validation and saved state |
 | `src/config_version.rs` | Version preflight, SemVer precedence and release-maintained compatibility baselines |
 | `src/init.rs`, `assets/polyfw.toml` | Configuration template and exclusive creation without project loading |
@@ -65,6 +66,7 @@ use the consuming workspaces' pins rather than inheriting the compiler used to r
 | `src/info.rs`, `src/ui.rs` | Read-only reports and terminal output |
 | `tests/project_root.rs`, `tests/standalone.rs` | Executable-level project isolation and external-tool boundaries |
 | `examples/`, `tests/examples.rs` | Minimal Cortex-M consumers reused by executable-level integration tests |
+| `tests/library.rs` | Public library API against a copied example, including a real build |
 | `.github/workflows/release.yml` | Tag validation, native binary archives and publication |
 
 Edit the initialization template in `assets/polyfw.toml`. Its schema directive points to

@@ -1,10 +1,8 @@
-use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::model::{CargoContext, Platform, Selection};
 use crate::profile::Profile;
-use crate::ui::{Progress, Ui};
 
 pub(crate) fn workspace_cargo(workspace: &Path) -> Command {
     workspace_command(workspace, "cargo")
@@ -38,6 +36,25 @@ pub(crate) fn target_cargo(context: &CargoContext, platform: &Platform) -> Comma
     }
     flags.push(format!("-Ctarget-cpu={}", platform.cpu));
     command.env(key, flags);
+    command
+}
+
+/// The `cargo build` command that creates the selection's ELF.
+pub(crate) fn build_command(selection: &Selection) -> Command {
+    let mut command = target_cargo(&selection.firmware.cargo, &selection.platform);
+    command
+        .arg("build")
+        .arg("--target")
+        .arg(&selection.platform.target)
+        .arg("-p")
+        .arg(&selection.firmware.package);
+    if let Some(bin) = &selection.firmware.bin {
+        command.arg("--bin").arg(bin);
+    }
+    command.arg("--locked");
+    if let Some(profile) = &selection.profile {
+        command.arg("--profile").arg(profile.name());
+    }
     command
 }
 
@@ -124,44 +141,12 @@ pub(crate) fn firmware_elf_path(selection: &Selection) -> PathBuf {
         .join(bin)
 }
 
-fn render_command(command: &Command) -> String {
-    std::iter::once(command.get_program())
-        .chain(command.get_args())
-        .map(|argument| argument.to_string_lossy())
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-pub(crate) fn run_command(ui: &Ui, mut command: Command) -> io::Result<()> {
-    let rendered = render_command(&command);
-    ui.command(&rendered);
-    let status = command.status()?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(io::Error::other(format!("{rendered} failed with {status}")))
-    }
-}
-
-pub(crate) fn run_command_with_progress(
-    ui: &Ui,
-    progress: &mut Progress<'_>,
-    label: &str,
-    command: Command,
-) -> io::Result<()> {
-    let step = progress.start(label);
-    let result = run_command(ui, command);
-    progress.finish(step, result.is_ok());
-    result
-}
-
 #[cfg(test)]
 mod tests {
     use std::fs;
 
     use super::*;
     use crate::model::Firmware;
-    use clap::ColorChoice;
 
     #[test]
     fn temporary_projects_use_the_project_toolchain_with_an_unusable_ancestor() {
@@ -197,44 +182,6 @@ mod tests {
             let stderr = String::from_utf8_lossy(&output.stderr);
             assert!(output.status.success(), "{test}:\n{stdout}\n{stderr}");
             assert!(stdout.contains("1 passed"), "{test}:\n{stdout}\n{stderr}");
-        }
-    }
-
-    #[test]
-    fn command_runners_preserve_launch_errors_and_failed_exit_statuses() {
-        let ui = Ui::new(ColorChoice::Never);
-        for with_progress in [false, true] {
-            for missing in [false, true] {
-                let mut command = if missing {
-                    Command::new(
-                        std::env::temp_dir()
-                            .join(format!("polyfw-missing-executable-{}", std::process::id())),
-                    )
-                } else {
-                    Command::new("rustc")
-                };
-                command.arg("--polyfw-invalid-argument");
-                let rendered = render_command(&command);
-                let result = if with_progress {
-                    run_command_with_progress(
-                        &ui,
-                        &mut Progress::new(&ui, 1),
-                        "test command",
-                        command,
-                    )
-                } else {
-                    run_command(&ui, command)
-                };
-                let error = result.unwrap_err();
-                if missing {
-                    assert_eq!(error.kind(), io::ErrorKind::NotFound);
-                    assert!(error.raw_os_error().is_some());
-                } else {
-                    assert_eq!(error.kind(), io::ErrorKind::Other);
-                    assert!(error.to_string().contains("failed with"), "{error}");
-                    assert!(error.to_string().starts_with(&rendered), "{error}");
-                }
-            }
         }
     }
 
