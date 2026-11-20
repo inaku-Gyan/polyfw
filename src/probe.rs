@@ -6,8 +6,8 @@ use crate::Result;
 use crate::cli::{MonitorArgs, ProbeArgs};
 use crate::model::Selection;
 use crate::registry::Context;
-use crate::runner::{self, run_command, run_command_with_progress};
-use crate::ui::{self, Progress, Ui};
+use crate::runner;
+use crate::ui::{self, Progress, Ui, run_command, run_command_with_progress};
 
 pub(crate) enum Action<'a> {
     Run { monitor: &'a MonitorArgs },

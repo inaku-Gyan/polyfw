@@ -7,9 +7,9 @@ use crate::model::Selection;
 use crate::probe::{self, Action};
 use crate::profile::Profile;
 use crate::registry::{Context, unique_contexts};
-use crate::runner::{self, run_command_with_progress};
+use crate::runner;
 use crate::scope::{self, PackageScope, WorkspaceScope};
-use crate::ui::{self, Progress, Ui};
+use crate::ui::{self, Progress, Ui, run_command_with_progress};
 
 pub(crate) fn run(context: Context, task: Task, ui: &Ui) -> Result<ExitCode> {
     let selections = match task.firmware_args() {
@@ -206,10 +206,10 @@ fn clean_command(_context: &Context, selection: &Selection, all_firmwares: bool)
     command
 }
 
-fn build(context: &Context, ui: &Ui, selections: &[Selection]) -> Result<()> {
+fn build(_context: &Context, ui: &Ui, selections: &[Selection]) -> Result<()> {
     let mut progress = Progress::new(ui, selections.len());
     for selection in selections {
-        let command = build_command(context, selection);
+        let command = runner::build_command(selection);
         let firmware = match &selection.profile {
             Some(profile) => format!("{} ({})", selection.id, profile.name()),
             None => selection.id.clone(),
@@ -218,24 +218,6 @@ fn build(context: &Context, ui: &Ui, selections: &[Selection]) -> Result<()> {
         run_command_with_progress(ui, &mut progress, &label, command)?;
     }
     Ok(())
-}
-
-fn build_command(_context: &Context, selection: &Selection) -> Command {
-    let mut command = runner::target_cargo(&selection.firmware.cargo, &selection.platform);
-    command
-        .arg("build")
-        .arg("--target")
-        .arg(&selection.platform.target)
-        .arg("-p")
-        .arg(&selection.firmware.package);
-    if let Some(bin) = &selection.firmware.bin {
-        command.arg("--bin").arg(bin);
-    }
-    command.arg("--locked");
-    if let Some(profile) = &selection.profile {
-        command.arg("--profile").arg(profile.name());
-    }
-    command
 }
 
 struct Stage(String, Command);
@@ -787,7 +769,7 @@ mod tests {
             assert!(!selections.is_empty());
             for selection in selections {
                 assert_eq!(selection.profile.as_ref().map(Profile::name), expected);
-                let command = build_command(&context, &selection);
+                let command = runner::build_command(&selection);
                 let mut expected_args = vec![
                     "build",
                     "--target",
@@ -1101,7 +1083,7 @@ mod tests {
             firmware.bin = bin.map(str::to_owned);
             firmware.resolved_bin = bin.unwrap_or("robot-image").into();
             let selection = context.selection("test-firmware").unwrap();
-            let command = build_command(&context, &selection);
+            let command = runner::build_command(&selection);
             let mut expected = vec![
                 "build",
                 "--target",
