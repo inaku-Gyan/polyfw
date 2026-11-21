@@ -28,12 +28,21 @@ pkg-fmt = "tgz"
 [package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
 pkg-fmt = "zip"
 
+[features]
+default = ["cli"]
+cli = ["dep:clap", "dep:comfy-table", "dep:ctrlc", "dep:dialoguer"]
+
+[[bin]]
+name = "polyfw"
+path = "src/cli/main.rs"
+required-features = ["cli"]
+
 [dependencies]
 cargo-config2 = "0.1.45"
-clap = { version = "4.5", features = ["derive"] }
-comfy-table = { version = "8.0", features = ["custom_styling"] }
-ctrlc = { version = "3.5" }
-dialoguer = { version = "0.12", default-features = false, features = ["fuzzy-select"] }
+clap = { version = "4.5", features = ["derive"], optional = true }
+comfy-table = { version = "8.0", features = ["custom_styling"], optional = true }
+ctrlc = { version = "3.5", optional = true }
+dialoguer = { version = "0.12", default-features = false, features = ["fuzzy-select"], optional = true }
 glob = "0.3"
 schemars = "1.2"
 semver = "1"

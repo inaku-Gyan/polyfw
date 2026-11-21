@@ -3,8 +3,10 @@ use std::fs;
 
 use cargo_config2::{Config, ResolveOptions, Walk};
 
-use crate::model::Selection;
-use crate::{Result, runner};
+use super::model::Selection;
+use crate::InternalResult as Result;
+
+use super::runner;
 
 /// Check only supported, determinable Cargo configuration. Native Cargo always owns execution.
 pub(crate) fn check(selection: &Selection) -> Result<()> {
@@ -23,7 +25,7 @@ pub(crate) fn check(selection: &Selection) -> Result<()> {
 }
 
 fn check_inner(selection: &Selection) -> Result<()> {
-    let cwd = &selection.firmware.cargo.working_dir;
+    let cwd = &selection.cargo.working_dir;
     // These sources cannot be resolved faithfully by the pinned reader. Reject them before
     // resolution so cfg queries cannot create children outside the shared runner boundary.
     for path in Walk::new(cwd) {
@@ -69,7 +71,7 @@ fn check_inner(selection: &Selection) -> Result<()> {
             (key, value)
         })
         .collect::<BTreeMap<_, _>>();
-    let command = runner::target_cargo(&selection.firmware.cargo, &selection.platform);
+    let command = runner::target_cargo(&selection.cargo, &selection.platform);
     for (key, value) in command.get_envs() {
         match value {
             Some(value) => {
@@ -88,7 +90,7 @@ fn check_inner(selection: &Selection) -> Result<()> {
     }
     let config = Config::load_with_options(cwd, ResolveOptions::default().env(environment))?;
     let flags = config
-        .rustflags(selection.firmware.cargo.target.as_str())?
+        .rustflags(selection.cargo.target.as_str())?
         .unwrap_or_default();
     if flags
         .flags

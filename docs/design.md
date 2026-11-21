@@ -1,6 +1,6 @@
 # Design
 
-polyfw is an installed host CLI that operates on independently configured firmware projects.
+polyfw provides a host Rust library and CLI for independently configured firmware projects.
 [Configuration](configuration.md) owns the input contract and [Usage](usage.md) describes
 observable command behavior.
 
@@ -18,6 +18,33 @@ A Firmware is a selectable software entry bound to one Platform. A Platform decl
 CPU and chip, and may provide defaults for the working/intermediate/final-output directories
 and consistency checking. Workspace means Cargo workspace; there is no separately registered
 workspace identity. A Board is physical hardware.
+
+## Rust library
+
+The `polyfw` Cargo package contains a library rooted at `src/lib.rs` and a binary rooted at
+`src/cli/main.rs`. The binary uses the library's public interface. The default `cli` feature
+enables the binary and its argument parsing, terminal UI and signal handling dependencies.
+Rust host programs can disable default features when declaring the dependency.
+
+The library owns configuration, project workflows, saved selection, editor writes, and Cargo
+resolution and execution. The CLI owns argument conversion, firmware picker presentation,
+terminal progress, JSON encoding, exit codes and the `probe-rs` subprocess lifecycle. It uses
+library queries to obtain the firmware, chip and ELF for hardware actions.
+
+`Project::open` reads and validates configuration at an exact root. `Project::discover` opens
+the nearest registry from a given directory. The project keeps a configuration snapshot.
+Firmware and platform lists are available from that snapshot, and operations that need Cargo
+resolve it once per call. Reopen the project to read configuration edits.
+
+Pass a firmware ID directly for an explicit build, or use `FirmwareChoice` to request saved-state
+inheritance or persistence. When the choice requires input, the calling program can supply a
+picker through `Options`. Use `saved_selection`, `save_selection` and `clear_selection` to work
+with project-local selection state directly.
+
+Cargo operations are synchronous. The default captures the child's stdout and stderr in the
+stage report or failed-stage error. Inherited output lets the child use the caller's terminal.
+Callbacks receive structured progress on the calling thread. An artifact reports the expected
+ELF path and whether a file was present when checked.
 
 ## Load only the context a command needs
 
@@ -51,7 +78,7 @@ from build arguments. Same-named binaries follow Cargo's native output behavior.
 ## Configuration compatibility
 
 The [configuration guide](configuration.md#configuration-compatibility) owns version declarations,
-compatibility rules, Schema policy and manual migration. `config_version` owns SemVer comparison
+compatibility rules, Schema policy and manual migration. `config::version` owns SemVer comparison
 and the two release-maintained baselines. Version preflight runs before strict deserialization,
 Cargo, state writes and hardware; malformed TOML still precedes the version gate.
 
@@ -61,7 +88,7 @@ to configuration, CLI, JSON and saved state; the saved-state location remains th
 
 ## Workspace and compiler isolation
 
-All Cargo children use runner::workspace_cargo/workspace_command or the context-aware command
+All Cargo children use `cargo::runner` workspace or context-aware command
 constructors, including metadata and fixtures. They clear inherited RUSTUP_TOOLCHAIN. Firmware
 commands preserve the resolved working-dir; a discovered workspace root does not change cwd.
 Cargo/rustup search that directory's physical ancestry. Workspace membership still owns the
@@ -82,7 +109,7 @@ that consuming Cargo's host identity; custom target JSON filenames determine art
 
 ## Platform consistency checking
 
-`cargo_config` is used only by enabled check-platform preflight before selected builds and target
+`cargo::platform` runs the enabled check-platform preflight before selected builds and target
 Clippy. Firmware overrides Platform, including false; the final default is true. It analyzes the
 same child environment after polyfw's CPU/directory overrides, with the explicit compilation
 target. Last explicit CPU mismatch, absent determinable CPU, response files or unsupported
@@ -126,7 +153,7 @@ single image. verify shares the scope, executes format-check, lint, then tests, 
 
 ## Artifact identity
 
-runner::firmware_elf_path is the single public-layout resolver for info, hardware and editor
+`cargo::runner::firmware_elf_path` is the single public-layout resolver for info, hardware and editor
 consumers: effective target-dir / resolved-target / profile-directory / binary. Windows host
 executables have the native .exe suffix. profile owns dev/test => debug, release/bench => release,
 and custom-profile names. Cargo's private build-dir layout is never inspected.

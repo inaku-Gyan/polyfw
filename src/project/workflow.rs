@@ -1,392 +1,88 @@
-use std::process::{Command, ExitCode};
+use crate::cargo::{model::Selection, workflow as cargo_workflow};
+use crate::{Check, Profile, Result, RunReport, process};
 
-use crate::Result;
-use crate::cli::{FirmwareArgs, Task};
-use crate::info::Report;
-use crate::model::Selection;
-use crate::probe::{self, Action};
-use crate::profile::Profile;
-use crate::registry::{Context, unique_contexts};
-use crate::runner::{self, run_command_with_progress};
-use crate::scope::{self, PackageScope, WorkspaceScope};
-use crate::ui::{self, Progress, Ui};
+use super::{Artifact, BuildReport, Context, FirmwareTarget, Options, Project};
 
-pub(crate) fn run(context: Context, task: Task, ui: &Ui) -> Result<ExitCode> {
-    let selections = match task.firmware_args() {
-        Some(firmwares) => resolve(&context, ui, &firmwares, task.profile_override())?,
-        None => Vec::new(),
-    };
-    if matches!(&task, Task::Build { .. } | Task::Lint(_) | Task::Verify(_)) {
-        for selection in unique_contexts(&selections) {
-            crate::cargo_config::check(selection)?;
-        }
-    }
-    let scopes = match &task {
-        Task::Fmt(_) | Task::Lint(_) | Task::Test(_) | Task::Verify(_) => {
-            scope::resolve(&context, &selections)?
-        }
-        Task::Init
-        | Task::Schema { .. }
-        | Task::Info { .. }
-        | Task::Select { .. }
-        | Task::Clean(_)
-        | Task::Build { .. }
-        | Task::Probes
-        | Task::Run { .. }
-        | Task::Flash { .. }
-        | Task::Attach { .. }
-        | Task::Reset(_) => Vec::new(),
-    };
-    match task {
-        Task::Init => crate::init::run(&context.root, ui),
-        Task::Schema { output } => crate::registry::write_schema(output.as_deref()),
-        Task::Info { firmware, json } => info(&context, ui, firmware, json),
-        Task::Select {
-            firmware,
-            clear,
-            profile,
-        } => {
-            return select(&context, ui, firmware.as_deref(), clear, profile.explicit());
-        }
-        Task::Clean(firmwares) => clean(&context, ui, &selections, firmwares.all_firmwares),
-        Task::Build { .. } => build(&context, ui, &selections),
-        Task::Probes => probe::list(&context.root, ui),
-        Task::Run {
-            target, monitor, ..
-        } => probe::run(
-            &context,
-            ui,
-            &selections[0],
-            Action::Run { monitor: &monitor },
-            &target,
-        ),
-        Task::Flash { target, .. } => {
-            probe::run(&context, ui, &selections[0], Action::Flash, &target)
-        }
-        Task::Attach {
-            target, monitor, ..
-        } => probe::run(
-            &context,
-            ui,
-            &selections[0],
-            Action::Attach { monitor: &monitor },
-            &target,
-        ),
-        Task::Reset(target) => probe::run(&context, ui, &selections[0], Action::Reset, &target),
-        Task::Fmt(_) => run_stages(ui, fmt_stages(&context, ui, &scopes, false)),
-        Task::Lint(_) => run_stages(ui, lint_stages(&context, ui, &scopes)),
-        Task::Test(_) => run_stages(ui, test_stages(&context, ui, &scopes)),
-        Task::Verify(_) => {
-            let mut stages = fmt_stages(&context, ui, &scopes, true);
-            stages.extend(lint_stages(&context, ui, &scopes));
-            stages.extend(test_stages(&context, ui, &scopes));
-            run_stages(ui, stages)
-        }
-    }?;
-    Ok(ExitCode::SUCCESS)
-}
-
-fn info(context: &Context, ui: &Ui, firmware: Option<Option<String>>, json: bool) -> Result<()> {
-    let show_saved_selection = !matches!(firmware, Some(None));
-    let firmware = match firmware {
-        None => None,
-        Some(Some(firmware)) => Some(firmware),
-        Some(None) => {
-            let saved = context.read_saved_selection()?;
-            Some(ui.prompt_firmware(
-                &context.registry,
-                saved.as_ref().map(|saved| saved.firmware.as_str()),
-                "pass a firmware name with `polyfw info --firmware <FIRMWARE>`",
-            )?)
-        }
-    };
-    let report = Report::load(context, firmware.as_deref())?;
-    if json {
-        println!("{}", serde_json::to_string_pretty(&report)?);
-    } else {
-        ui.print_info(&report, show_saved_selection);
-    }
-    Ok(())
-}
-
-fn select(
-    context: &Context,
-    ui: &Ui,
-    firmware: Option<&str>,
-    clear: bool,
-    profile: Option<Profile>,
-) -> Result<ExitCode> {
-    if clear {
-        let mut exit = ExitCode::SUCCESS;
-        for (path, result) in context.clear_selection()? {
-            ui.removal(path, &result);
-            if result.is_err_and(|error| error.kind() != std::io::ErrorKind::NotFound) {
-                exit = ExitCode::FAILURE;
-            }
-        }
-        return Ok(exit);
-    }
-
-    let firmware = match firmware {
-        Some(firmware) => firmware.to_owned(),
-        None => {
-            let saved = context.read_selection()?;
-            ui.prompt_firmware(
-                &context.registry,
-                saved.as_ref().map(|saved| saved.firmware.as_str()),
-                "pass a firmware name or run polyfw select in a terminal",
-            )?
-        }
-    };
-    context.save_selection(&firmware, profile.as_ref())?;
-    ui.selected(&firmware, profile.as_ref());
-    Ok(ExitCode::SUCCESS)
-}
-
-fn clean(context: &Context, ui: &Ui, selections: &[Selection], all_firmwares: bool) -> Result<()> {
-    let mut seen = std::collections::BTreeSet::new();
-    let selected = selections
-        .iter()
-        .filter(|selection| {
-            !all_firmwares
-                || seen.insert((
-                    selection.firmware.cargo.working_dir.clone(),
-                    selection.firmware.cargo.target_dir.clone(),
-                    selection.firmware.cargo.build_dir.clone(),
-                ))
-        })
-        .collect::<Vec<_>>();
-    let mut progress = Progress::new(ui, selected.len());
-    for selection in selected {
-        let cargo = &selection.firmware.cargo;
-        let firmwares = context
-            .registry
-            .firmwares
-            .iter()
-            .filter(|(_, entry)| {
-                (entry.cargo.target_dir == cargo.target_dir
-                    || cargo
-                        .build_dir
-                        .as_ref()
-                        .is_some_and(|directory| entry.cargo.build_dir.as_ref() == Some(directory)))
-                    && (all_firmwares || entry.package == selection.firmware.package)
-            })
-            .map(|(id, _)| id.as_str())
-            .collect::<Vec<_>>();
-        if all_firmwares {
-            ui.cleaning_directories(&cargo.target_dir.display().to_string(), &firmwares);
-        } else {
-            ui.cleaning_package(
-                &selection.firmware.package,
-                &cargo.target_dir.display().to_string(),
-                &firmwares,
-            );
-        }
-        run_command_with_progress(
-            ui,
-            &mut progress,
-            &ui.label("clean", &[&selection.id], ui::Target::None),
-            clean_command(context, selection, all_firmwares),
+impl Project {
+    /// Builds the requested firmware and reports its expected artifacts.
+    pub fn build(
+        &self,
+        target: FirmwareTarget<'_>,
+        profile: Option<&Profile>,
+        mut options: Options<'_>,
+    ) -> Result<BuildReport> {
+        let context = self.context.resolved()?;
+        let selections = context.targets(target, profile, &mut options)?;
+        let execution = process::run(
+            cargo_workflow::build(&selections)?,
+            options.output,
+            options.progress,
         )?;
-    }
-    Ok(())
-}
-
-fn clean_command(_context: &Context, selection: &Selection, all_firmwares: bool) -> Command {
-    let mut command = runner::cargo_command(&selection.firmware.cargo);
-    command.arg("clean");
-    if !all_firmwares {
-        command
-            .arg("-p")
-            .arg(&selection.firmware.package)
-            .arg("--target")
-            .arg(&selection.platform.target)
-            .args(["--target", "host-tuple"]);
-    }
-    command
-}
-
-fn build(context: &Context, ui: &Ui, selections: &[Selection]) -> Result<()> {
-    let mut progress = Progress::new(ui, selections.len());
-    for selection in selections {
-        let command = build_command(context, selection);
-        let firmware = match &selection.profile {
-            Some(profile) => format!("{} ({})", selection.id, profile.name()),
-            None => selection.id.clone(),
-        };
-        let label = ui.label("build", &[&firmware], ui::Target::Embedded);
-        run_command_with_progress(ui, &mut progress, &label, command)?;
-    }
-    Ok(())
-}
-
-fn build_command(_context: &Context, selection: &Selection) -> Command {
-    let mut command = runner::target_cargo(&selection.firmware.cargo, &selection.platform);
-    command
-        .arg("build")
-        .arg("--target")
-        .arg(&selection.platform.target)
-        .arg("-p")
-        .arg(&selection.firmware.package);
-    if let Some(bin) = &selection.firmware.bin {
-        command.arg("--bin").arg(bin);
-    }
-    command.arg("--locked");
-    if let Some(profile) = &selection.profile {
-        command.arg("--profile").arg(profile.name());
-    }
-    command
-}
-
-struct Stage(String, Command);
-
-fn run_stages(ui: &Ui, stages: Vec<Stage>) -> Result<()> {
-    let mut progress = Progress::new(ui, stages.len());
-    for Stage(label, command) in stages {
-        run_command_with_progress(ui, &mut progress, &label, command)?;
-    }
-    Ok(())
-}
-
-fn fmt_stages(_context: &Context, ui: &Ui, scopes: &[WorkspaceScope], check: bool) -> Vec<Stage> {
-    let mut stages = Vec::new();
-    for scope in scope::host_scopes(scopes) {
-        let mut command = runner::cargo_command(&scope.cargo);
-        command.arg("fmt");
-        let names = add_packages(&mut command, scope.packages, |package| &package.name);
-        let action = if check {
-            command.arg("--check");
-            "format check"
-        } else {
-            "format"
-        };
-        stages.push(Stage(ui.label(action, &names, ui::Target::None), command));
-    }
-    stages
-}
-
-fn lint_stages(_context: &Context, ui: &Ui, scopes: &[WorkspaceScope]) -> Vec<Stage> {
-    let mut stages = Vec::new();
-    for scope in scopes {
-        if scope.packages.is_empty() {
-            continue;
-        }
-        let mut command = runner::target_cargo(&scope.cargo, &scope.platform);
-        command
-            .arg("clippy")
-            .arg("--target")
-            .arg(&scope.platform.target);
-        let names = add_packages(
-            &mut command,
-            scope.packages.iter().filter(|package| package.embedded),
-            |package| &package.id,
-        );
-        if !names.is_empty() {
-            command
-                .args(["--lib", "--bins"])
-                .args(["--locked", "--", "-D", "warnings"]);
-            stages.push(Stage(
-                ui.label("lint", &names, ui::Target::Embedded),
-                command,
-            ));
-        }
-    }
-    for scope in scope::host_scopes(scopes) {
-        let mut host = runner::cargo_command(&scope.cargo);
-        host.arg("clippy");
-        let names = add_packages(&mut host, scope.packages, |package| &package.host_id);
-        host.args([
-            "--lib",
-            "--tests",
-            "--target",
-            "host-tuple",
-            "--locked",
-            "--",
-            "-D",
-            "warnings",
-        ]);
-        stages.push(Stage(ui.label("lint", &names, ui::Target::Host), host));
-    }
-    stages
-}
-
-fn test_stages(_context: &Context, ui: &Ui, scopes: &[WorkspaceScope]) -> Vec<Stage> {
-    let mut stages = Vec::new();
-    for scope in scope::host_scopes(scopes) {
-        let mut command = runner::cargo_command(&scope.cargo);
-        command.arg("test");
-        let names = add_packages(&mut command, scope.packages, |package| &package.host_id);
-        command.args(["--target", "host-tuple", "--locked"]);
-        stages.push(Stage(ui.label("test", &names, ui::Target::Host), command));
-    }
-    stages
-}
-
-fn add_packages<'a>(
-    command: &mut Command,
-    packages: impl IntoIterator<Item = &'a PackageScope>,
-    spec: fn(&PackageScope) -> &str,
-) -> Vec<&'a str> {
-    packages
-        .into_iter()
-        .map(|package| {
-            let name = package.name.as_str();
-            command.arg("-p").arg(spec(package));
-            name
+        let artifacts = selections.iter().map(Artifact::from_selection).collect();
+        Ok(BuildReport {
+            artifacts,
+            execution,
         })
-        .collect()
+    }
+
+    /// Cleans an individual firmware package or all registered output directory contexts.
+    pub fn clean(&self, target: FirmwareTarget<'_>, mut options: Options<'_>) -> Result<RunReport> {
+        let context = self.context.resolved()?;
+        let selections = context.targets(target, None, &mut options)?;
+        let stages = cargo_workflow::clean(
+            &context.registry,
+            &context.cargo,
+            &selections,
+            matches!(target, FirmwareTarget::All),
+        );
+        process::run(stages, options.output, options.progress)
+    }
+
+    /// Runs a formatting, lint, test or verification workflow over the requested scope.
+    pub fn check(
+        &self,
+        check: Check,
+        target: FirmwareTarget<'_>,
+        mut options: Options<'_>,
+    ) -> Result<RunReport> {
+        let context = self.context.resolved()?;
+        let selections = context.targets(target, None, &mut options)?;
+        let stages = cargo_workflow::check(
+            &context.root,
+            &context.registry.config.local_dependencies,
+            &selections,
+            check,
+        )?;
+        process::run(stages, options.output, options.progress)
+    }
 }
 
-fn resolve(
-    context: &Context,
-    ui: &Ui,
-    firmwares: &FirmwareArgs,
-    profile: Option<Profile>,
-) -> Result<Vec<Selection>> {
-    if firmwares.all_firmwares {
-        return context
-            .registry
-            .firmwares
-            .keys()
-            .map(|id| {
-                let mut selection = context.selection(id)?;
-                selection.profile = profile.clone();
-                Ok(selection)
-            })
-            .collect();
-    }
-
-    let saved = if firmwares.select && firmwares.firmware.is_some() {
-        None
-    } else {
-        context.read_selection()?
-    };
-    let id = match (
-        firmwares.firmware.as_deref(),
-        firmwares.select,
-        saved.as_ref(),
-    ) {
-        (Some(id), _, _) => id.to_owned(),
-        (None, false, Some(saved)) => saved.firmware.clone(),
-        (None, _, saved) => ui.prompt_firmware(
-            &context.registry,
-            saved.map(|saved| saved.firmware.as_str()),
-            "pass a firmware name or run polyfw select in a terminal",
-        )?,
-    };
-    let mut selection = context.selection(&id)?;
-    selection.profile = profile.or_else(|| {
-        if firmwares.select {
-            None
-        } else {
-            saved.and_then(|saved| saved.profile)
+impl Context {
+    fn targets(
+        &self,
+        target: FirmwareTarget<'_>,
+        profile: Option<&Profile>,
+        options: &mut Options<'_>,
+    ) -> Result<Vec<Selection>> {
+        match target {
+            FirmwareTarget::One(choice) => {
+                let (id, profile) = self.choose_firmware(choice, profile, options)?;
+                let mut selection = self.selection(&id)?;
+                selection.profile = profile;
+                Ok(vec![selection])
+            }
+            FirmwareTarget::All => self
+                .registry
+                .firmwares
+                .keys()
+                .map(|id| {
+                    let mut selection = self.selection(id)?;
+                    selection.profile = profile.cloned();
+                    Ok(selection)
+                })
+                .collect(),
         }
-    });
-    if firmwares.select {
-        context.save_selection(&id, selection.profile.as_ref())?;
-        ui.selected(&id, selection.profile.as_ref());
     }
-    Ok(vec![selection])
 }
 
 #[cfg(test)]
@@ -395,66 +91,37 @@ mod tests {
     use std::ffi::OsStr;
     use std::fs;
     use std::path::{Path, PathBuf};
-
-    use clap::ColorChoice;
-    use clap::Parser;
+    use std::process::Command;
 
     use super::*;
-    use crate::model::{Firmware, Platform, Registry};
+    use crate::cargo::model::{CargoContext, FirmwareCargo};
+    use crate::cargo::runner;
+    use crate::cargo::scope::{self, PackageScope, WorkspaceScope};
+    use crate::cargo::workflow::{
+        build_command, clean_command, fmt_stages, lint_stages, test_stages,
+    };
+    use crate::config::model::{Config, Firmware, Platform, Registry};
+    use crate::config::version::CLI_VERSION;
+    use crate::process::Invocation;
+    use crate::project::vscode;
+    use crate::{FirmwareChoice, OutputMode};
 
-    #[test]
-    fn info_requires_a_terminal_to_pick_even_when_a_firmware_is_saved() {
-        const MODE: &str = "FLEET_XTASK_TEST_INFO_PICKER";
-        if std::env::var_os(MODE).is_some() {
-            for saved in [false, true] {
-                for json in [false, true] {
-                    let root = test_root(&format!("info-picker-{saved}-{json}"));
-                    let context = test_context(root.clone());
-                    if saved {
-                        context
-                            .save_selection("test-firmware", Some(&"release".parse().unwrap()))
-                            .unwrap();
-                    }
-                    let state_path = context.selection_path();
-                    let launch_path = root.join(crate::vscode::LAUNCH_FILE);
-                    let state = fs::read(&state_path).ok();
-                    let launch = fs::read(&launch_path).ok();
-                    let mut args = vec!["polyfw", "info", "--firmware"];
-                    if json {
-                        args.push("--json");
-                    }
-                    let task = crate::cli::Cli::try_parse_from(args)
-                        .unwrap()
-                        .command
-                        .unwrap();
-                    let error = run(context, task, &Ui::new(ColorChoice::Never)).unwrap_err();
-                    assert!(
-                        error
-                            .to_string()
-                            .contains("polyfw info --firmware <FIRMWARE>"),
-                        "{error}"
-                    );
-                    assert_eq!(fs::read(state_path).ok(), state);
-                    assert_eq!(fs::read(launch_path).ok(), launch);
-                    fs::remove_dir_all(root).unwrap();
-                }
-            }
-            return;
-        }
+    fn scopes(context: &Context, selections: &[Selection]) -> Vec<WorkspaceScope> {
+        scope::resolve(
+            &context.root,
+            &context.registry.config.local_dependencies,
+            selections,
+        )
+        .unwrap()
+    }
 
-        let output = Command::new(std::env::current_exe().unwrap())
-            .args([
-                "--exact",
-                "commands::tests::info_requires_a_terminal_to_pick_even_when_a_firmware_is_saved",
-                "--nocapture",
-            ])
-            .env(MODE, "1")
-            .output()
-            .unwrap();
-        let stdout = String::from_utf8(output.stdout).unwrap();
-        let stderr = String::from_utf8(output.stderr).unwrap();
-        assert!(output.status.success(), "{stdout}\n{stderr}");
-        assert!(!stdout.contains("repository_root"), "{stdout}");
+    fn build(selections: &[Selection]) {
+        process::run(
+            cargo_workflow::build(selections).unwrap(),
+            OutputMode::Inherit,
+            None,
+        )
+        .unwrap();
     }
 
     #[test]
@@ -462,7 +129,7 @@ mod tests {
         let mut context = test_context(test_root("vscode profiles with spaces"));
         let firmware = context.registry.firmwares.get_mut("test-firmware").unwrap();
         firmware.bin = Some("robot-image".into());
-        firmware.resolved_bin = "robot-image".into();
+        context.cargo.get_mut("test-firmware").unwrap().bin = "robot-image".into();
         let mut other_platform = context.registry.platforms["test-platform"].clone();
         other_platform.chip = "another-chip".into();
         context
@@ -475,6 +142,8 @@ mod tests {
             .registry
             .firmwares
             .insert("other-firmware".into(), other_firmware);
+        let other_cargo = context.cargo["test-firmware"].clone();
+        context.cargo.insert("other-firmware".into(), other_cargo);
         for firmware in ["test-firmware", "other-firmware"] {
             for (profile, directory, suffix) in [
                 (None, "debug", ""),
@@ -482,26 +151,21 @@ mod tests {
                 (Some("release"), "release", " (release)"),
                 (Some("bench-debug"), "bench-debug", " (bench-debug)"),
             ] {
-                let _ = select(
-                    &context,
-                    &Ui::new(ColorChoice::Never),
-                    Some(firmware),
-                    false,
-                    profile.map(|profile| profile.parse().unwrap()),
-                )
-                .unwrap();
+                let profile_value = profile.map(|profile| profile.parse().unwrap());
+                context
+                    .save_selection(firmware, profile_value.as_ref())
+                    .unwrap();
                 let state: toml::Value =
                     toml::from_str(&fs::read_to_string(context.selection_path()).unwrap()).unwrap();
                 assert_eq!(state.get("profile").and_then(toml::Value::as_str), profile);
                 let value: serde_json::Value = serde_json::from_slice(
-                    &fs::read(context.root.join(crate::vscode::LAUNCH_FILE)).unwrap(),
+                    &fs::read(context.root.join(vscode::LAUNCH_FILE)).unwrap(),
                 )
                 .unwrap();
                 let configurations = value["configurations"].as_array().unwrap();
                 assert_eq!(configurations.len(), 2);
                 let selection = context.selection(firmware).unwrap();
                 let expected_elf = selection
-                    .firmware
                     .cargo
                     .target_dir
                     .join("thumbv7em-none-eabihf")
@@ -523,10 +187,9 @@ mod tests {
                 }
             }
         }
-        let value: serde_json::Value = serde_json::from_slice(
-            &fs::read(context.root.join(crate::vscode::LAUNCH_FILE)).unwrap(),
-        )
-        .unwrap();
+        let value: serde_json::Value =
+            serde_json::from_slice(&fs::read(context.root.join(vscode::LAUNCH_FILE)).unwrap())
+                .unwrap();
         assert_eq!(value["version"], "0.2.0");
         let configurations = value["configurations"].as_array().unwrap();
         for configuration in configurations {
@@ -562,8 +225,7 @@ mod tests {
         let editor = context.root.join(".vscode");
         fs::write(editor.join("settings.json"), "{}\n").unwrap();
         fs::write(editor.join("tasks.json"), "{}\n").unwrap();
-        let ui = Ui::new(ColorChoice::Never);
-        let _ = select(&context, &ui, None, true, None).unwrap();
+        assert!(context.clear_selection().unwrap().success());
         assert!(!context.selection_path().exists());
         assert!(!editor.join("launch.json").exists());
         assert_eq!(
@@ -577,34 +239,28 @@ mod tests {
         fs::remove_dir_all(context.selection_path().parent().unwrap()).unwrap();
         fs::write(editor.join("launch.json"), "{}\n").unwrap();
         let removed = context.clear_selection().unwrap();
-        assert!(removed[0].1.is_ok());
+        assert!(removed.files[0].result.is_ok());
         assert_eq!(
-            removed[1].1.as_ref().unwrap_err().kind(),
+            removed.files[1].result.as_ref().unwrap_err().kind(),
             std::io::ErrorKind::NotFound
         );
         assert!(!editor.join("launch.json").exists());
-        assert_eq!(
-            select(&context, &ui, None, true, None).unwrap(),
-            ExitCode::SUCCESS
-        );
+        assert!(context.clear_selection().unwrap().success());
         fs::remove_dir_all(context.root).unwrap();
     }
 
     #[test]
     fn clearing_selection_attempts_every_file_and_returns_failure_after_an_error() {
-        for failed_file in [crate::vscode::LAUNCH_FILE, ".polyfw-state/selected"] {
+        for failed_file in [vscode::LAUNCH_FILE, ".polyfw-state/selected"] {
             let context = test_context(test_root(&format!("clear-failed-{failed_file}")));
             context.save_selection("test-firmware", None).unwrap();
             let failed_path = context.root.join(failed_file);
             fs::remove_file(&failed_path).unwrap();
             fs::create_dir(&failed_path).unwrap();
 
-            assert_eq!(
-                select(&context, &Ui::new(ColorChoice::Never), None, true, None).unwrap(),
-                ExitCode::FAILURE
-            );
+            assert!(!context.clear_selection().unwrap().success());
             assert!(failed_path.is_dir());
-            for file in [crate::vscode::LAUNCH_FILE, ".polyfw-state/selected"] {
+            for file in [vscode::LAUNCH_FILE, ".polyfw-state/selected"] {
                 if file != failed_file {
                     assert!(!context.root.join(file).exists());
                 }
@@ -618,7 +274,7 @@ mod tests {
         let context = test_context(test_root("selection-lock-failure"));
         context.save_selection("test-firmware", None).unwrap();
         let selection = context.selection_path();
-        let launch = context.root.join(crate::vscode::LAUNCH_FILE);
+        let launch = context.root.join(vscode::LAUNCH_FILE);
         let previous_selection = fs::read(&selection).unwrap();
         let previous_launch = fs::read(&launch).unwrap();
         let lock = context.root.join(".polyfw-state/selection.lock");
@@ -629,8 +285,7 @@ mod tests {
         let save_error = context
             .save_selection("test-firmware", Some(&profile))
             .unwrap_err();
-        let clear_error =
-            select(&context, &Ui::new(ColorChoice::Never), None, true, None).unwrap_err();
+        let clear_error = context.clear_selection().unwrap_err();
         for error in [save_error, clear_error] {
             assert!(
                 error.to_string().contains("could not lock selection"),
@@ -646,7 +301,7 @@ mod tests {
     fn disabling_vscode_leaves_existing_editor_files_untouched_when_saving_or_clearing() {
         let mut context = test_context(test_root("vscode-disabled"));
         context.save_selection("test-firmware", None).unwrap();
-        let path = context.root.join(crate::vscode::LAUNCH_FILE);
+        let path = context.root.join(vscode::LAUNCH_FILE);
         let previous = fs::read(&path).unwrap();
         context.registry.config.vscode.enabled = false;
         context
@@ -663,36 +318,53 @@ mod tests {
                 .name(),
             "release"
         );
-        let exit = select(&context, &Ui::new(ColorChoice::Never), None, true, None).unwrap();
-        assert_eq!(exit, ExitCode::SUCCESS);
+        assert!(context.clear_selection().unwrap().success());
         assert!(!context.selection_path().exists());
         assert_eq!(fs::read(&path).unwrap(), previous);
         fs::remove_file(&path).unwrap();
         fs::create_dir(&path).unwrap();
         context.save_selection("test-firmware", None).unwrap();
-        assert_eq!(context.clear_selection().unwrap().len(), 1);
+        assert_eq!(context.clear_selection().unwrap().files.len(), 1);
         assert!(path.is_dir());
         fs::remove_dir_all(context.root).unwrap();
     }
 
     #[test]
     fn firmware_commands_that_save_a_selection_respect_the_vscode_switch() {
-        use clap::Parser;
-
-        for command in [
-            "clean", "build", "fmt", "lint", "test", "verify", "run", "flash", "attach",
-        ] {
+        for command in ["clean", "build", "fmt", "lint", "test", "verify", "image"] {
             let mut context = test_context(test_root(&format!("vscode-disabled-{command}")));
             context.registry.config.vscode.enabled = false;
             fs::write(context.root.join(".vscode"), "not a directory").unwrap();
             let root = context.root.clone();
-            let task =
-                crate::cli::Cli::try_parse_from(["polyfw", command, "test-firmware", "--select"])
-                    .unwrap()
-                    .command
-                    .unwrap();
-            // Every action fails on this fixture after saving; the selected firmware remains saved.
-            assert!(run(context, task, &Ui::new(ColorChoice::Never)).is_err());
+            let target = FirmwareTarget::One(FirmwareChoice::Save(Some("test-firmware")));
+            let selections = context
+                .targets(target, None, &mut Options::default())
+                .unwrap();
+            // The operation fails after saving on this fixture.
+            let plan = match command {
+                "clean" => Ok(cargo_workflow::clean(
+                    &context.registry,
+                    &context.cargo,
+                    &selections,
+                    false,
+                )),
+                "build" => cargo_workflow::build(&selections),
+                "fmt" => cargo_workflow::check(&root, &[], &selections, Check::Format),
+                "lint" => cargo_workflow::check(&root, &[], &selections, Check::Lint),
+                "test" => cargo_workflow::check(&root, &[], &selections, Check::Test),
+                "verify" => cargo_workflow::check(&root, &[], &selections, Check::Verify),
+                "image" => {
+                    assert!(!Artifact::from_selection(&selections[0]).exists);
+                    Ok(vec![])
+                }
+                _ => unreachable!(),
+            };
+            if command != "image" {
+                assert!(
+                    plan.and_then(|stages| process::run(stages, OutputMode::Capture, None))
+                        .is_err()
+                );
+            }
             assert_eq!(
                 fs::read_to_string(root.join(".polyfw-state/selected")).unwrap(),
                 "firmware = \"test-firmware\"\n",
@@ -710,7 +382,7 @@ mod tests {
     fn a_failed_selection_save_restores_the_previous_launch_or_removes_the_new_one() {
         for existing in [false, true] {
             let context = test_context(test_root(&format!("vscode-rollback-{existing}")));
-            let path = context.root.join(crate::vscode::LAUNCH_FILE);
+            let path = context.root.join(vscode::LAUNCH_FILE);
             let previous = if existing {
                 context.save_selection("test-firmware", None).unwrap();
                 let previous = fs::read(&path).unwrap();
@@ -743,58 +415,57 @@ mod tests {
             .registry
             .firmwares
             .insert("other-firmware".into(), other);
-        let ui = Ui::new(ColorChoice::Never);
-        for (args, expected, saved_firmware, saved_profile) in [
+        let with_saved = |id| FirmwareTarget::One(FirmwareChoice::WithSaved(id));
+        let save = FirmwareTarget::One(FirmwareChoice::Save(Some("other-firmware")));
+        let other_cargo = context.cargo["test-firmware"].clone();
+        context.cargo.insert("other-firmware".into(), other_cargo);
+        for (target, profile, expected, saved_firmware, saved_profile) in [
             (
-                vec!["build"],
-                Some("release"),
-                "test-firmware",
-                Some("release"),
-            ),
-            (
-                vec!["build", "other-firmware"],
-                Some("release"),
-                "test-firmware",
-                Some("release"),
-            ),
-            (
-                vec!["build", "other-firmware", "--profile", "dev"],
-                Some("dev"),
-                "test-firmware",
-                Some("release"),
-            ),
-            (
-                vec!["build", "other-firmware", "--select"],
+                with_saved(None),
                 None,
-                "other-firmware",
+                Some("release"),
+                "test-firmware",
+                Some("release"),
+            ),
+            (
+                with_saved(Some("other-firmware")),
                 None,
+                Some("release"),
+                "test-firmware",
+                Some("release"),
             ),
             (
-                vec!["build", "other-firmware", "--select", "--profile", "dev"],
+                with_saved(Some("other-firmware")),
+                Some("dev"),
+                Some("dev"),
+                "test-firmware",
+                Some("release"),
+            ),
+            (save, None, None, "other-firmware", None),
+            (
+                save,
+                Some("dev"),
                 Some("dev"),
                 "other-firmware",
                 Some("dev"),
             ),
             (
-                vec![
-                    "build",
-                    "other-firmware",
-                    "--select",
-                    "--profile",
-                    "bench-debug",
-                ],
+                save,
+                Some("bench-debug"),
                 Some("bench-debug"),
                 "other-firmware",
                 Some("bench-debug"),
             ),
             (
-                vec!["build", "--all-firmwares"],
+                FirmwareTarget::All,
+                None,
                 None,
                 "test-firmware",
                 Some("release"),
             ),
             (
-                vec!["build", "--all-firmwares", "--profile", "dev"],
+                FirmwareTarget::All,
+                Some("dev"),
                 Some("dev"),
                 "test-firmware",
                 Some("release"),
@@ -803,21 +474,14 @@ mod tests {
             context
                 .save_selection("test-firmware", Some(&"release".parse().unwrap()))
                 .unwrap();
-            let task = crate::cli::Cli::try_parse_from(std::iter::once("polyfw").chain(args))
-                .unwrap()
-                .command
+            let profile = profile.map(|name| name.parse().unwrap());
+            let selections = context
+                .targets(target, profile.as_ref(), &mut Options::default())
                 .unwrap();
-            let selections = resolve(
-                &context,
-                &ui,
-                &task.firmware_args().unwrap(),
-                task.profile_override(),
-            )
-            .unwrap();
             assert!(!selections.is_empty());
             for selection in selections {
                 assert_eq!(selection.profile.as_ref().map(Profile::name), expected);
-                let command = build_command(&context, &selection);
+                let command = build_command(&selection);
                 let mut expected_args = vec![
                     "build",
                     "--target",
@@ -837,10 +501,9 @@ mod tests {
             let saved = context.read_selection().unwrap().unwrap();
             assert_eq!(saved.firmware, saved_firmware);
             assert_eq!(saved.profile.as_ref().map(Profile::name), saved_profile);
-            let launch: serde_json::Value = serde_json::from_slice(
-                &fs::read(context.root.join(crate::vscode::LAUNCH_FILE)).unwrap(),
-            )
-            .unwrap();
+            let launch: serde_json::Value =
+                serde_json::from_slice(&fs::read(context.root.join(vscode::LAUNCH_FILE)).unwrap())
+                    .unwrap();
             assert_eq!(
                 launch["configurations"][0]["name"],
                 match saved_profile {
@@ -855,7 +518,7 @@ mod tests {
                 saved_profile
             );
         }
-        let _ = select(&context, &ui, Some("other-firmware"), false, None).unwrap();
+        context.save_selection("other-firmware", None).unwrap();
         assert!(context.read_selection().unwrap().unwrap().profile.is_none());
         fs::remove_dir_all(context.root).unwrap();
     }
@@ -898,7 +561,7 @@ mod tests {
         context.resolve_cargo().unwrap();
         let mut selection = context.selection("test-firmware").unwrap();
         selection.profile = Some("bench-debug".parse().unwrap());
-        build(&context, &Ui::new(ColorChoice::Never), &[selection.clone()]).unwrap();
+        build(std::slice::from_ref(&selection));
         let elf =
             runner::firmware_elf_path(&selection).with_extension(std::env::consts::EXE_EXTENSION);
         assert!(elf.is_file(), "{}", elf.display());
@@ -918,7 +581,7 @@ mod tests {
         let context = test_context(test_root("grouped-checks"));
         let platform = context.registry.platforms["test-platform"].clone();
         let scopes = ["first", "second"].map(|id| {
-            let mut cargo = crate::model::CargoContext::fixture(&context.root, id);
+            let mut cargo = CargoContext::fixture(&context.root, id);
             cargo.working_dir = context.root.join(id);
             WorkspaceScope {
                 platform: platform.clone(),
@@ -934,18 +597,20 @@ mod tests {
                 }],
             }
         });
-        let ui = Ui::new(ColorChoice::Never);
-        let host = test_stages(&context, &ui, &scopes);
+        let host = test_stages(&scopes);
         assert_eq!(host.len(), 2);
-        assert_ne!(host[0].1.get_current_dir(), host[1].1.get_current_dir());
-        for Stage(_, command) in &host {
+        assert_ne!(
+            host[0].command.get_current_dir(),
+            host[1].command.get_current_dir()
+        );
+        for Invocation { command, .. } in &host {
             assert!(command.get_args().any(|arg| arg == "host-tuple"));
             assert!(!command.get_envs().any(|(key, value)| {
                 key == "CARGO_TARGET_THUMBV7EM_NONE_EABIHF_RUSTFLAGS" && value.is_some()
             }));
         }
-        assert_eq!(fmt_stages(&context, &ui, &scopes, true).len(), 2);
-        assert_eq!(lint_stages(&context, &ui, &scopes).len(), 4);
+        assert_eq!(fmt_stages(&scopes, true).len(), 2);
+        assert_eq!(lint_stages(&scopes).len(), 4);
         fs::remove_dir_all(context.root).unwrap();
     }
 
@@ -953,19 +618,11 @@ mod tests {
     fn resolving_an_explicit_firmware_with_select_saves_it_before_the_command() {
         let root = test_root("select");
         let context = test_context(root.clone());
-        let ui = Ui::new(ColorChoice::Never);
 
-        let selections = resolve(
-            &context,
-            &ui,
-            &FirmwareArgs {
-                firmware: Some("test-firmware".into()),
-                select: true,
-                all_firmwares: false,
-            },
-            None,
-        )
-        .unwrap();
+        let choice = FirmwareChoice::Save(Some("test-firmware"));
+        let selections = context
+            .targets(FirmwareTarget::One(choice), None, &mut Options::default())
+            .unwrap();
 
         assert_eq!(selections[0].id, "test-firmware");
         let saved = context.read_selection().unwrap().unwrap();
@@ -978,19 +635,11 @@ mod tests {
     fn resolving_an_explicit_firmware_without_select_does_not_save_it() {
         let root = test_root("transient");
         let context = test_context(root.clone());
-        let ui = Ui::new(ColorChoice::Never);
 
-        let selections = resolve(
-            &context,
-            &ui,
-            &FirmwareArgs {
-                firmware: Some("test-firmware".into()),
-                select: false,
-                all_firmwares: false,
-            },
-            None,
-        )
-        .unwrap();
+        let choice = FirmwareChoice::Explicit("test-firmware");
+        let selections = context
+            .targets(FirmwareTarget::One(choice), None, &mut Options::default())
+            .unwrap();
 
         assert_eq!(selections[0].id, "test-firmware");
         assert!(!context.selection_path().exists());
@@ -1002,7 +651,7 @@ mod tests {
         let root = test_root("clean-command");
         let context = test_context(root.clone());
         let selection = context.selection("test-firmware").unwrap();
-        let command = clean_command(&context, &selection, false);
+        let command = clean_command(&selection, false);
         let workspace = root.join("platform/test");
         let target_dir = root.join("target/firmware/test-platform");
 
@@ -1034,76 +683,44 @@ mod tests {
 
     #[test]
     fn cleaning_a_package_lists_all_affected_firmwares_in_that_platform() {
-        const MODE: &str = "FLEET_XTASK_TEST_CLEAN_OUTPUT";
-        if std::env::var_os(MODE).is_some() {
-            let mut context = host_test_context("clean-output");
-            let firmware = context.registry.firmwares["test-firmware"].clone();
+        let mut context = test_context(test_root("clean-output"));
+        let firmware = context.registry.firmwares["test-firmware"].clone();
+        let base = context.cargo["test-firmware"].clone();
+        let platform = context.registry.platforms["test-platform"].clone();
+        context
+            .registry
+            .platforms
+            .insert("other-family".into(), platform);
+        for (id, package, platform) in [
+            ("secondary-firmware", "test-firmware", "test-platform"),
+            ("unrelated-firmware", "test-platform", "test-platform"),
+            ("other-family-firmware", "test-firmware", "other-family"),
+        ] {
             context.registry.firmwares.insert(
-                "secondary-firmware".into(),
+                id.into(),
                 Firmware {
-                    bin: Some("second-image".into()),
-                    resolved_bin: "second-image".into(),
+                    package: package.into(),
+                    platform: platform.into(),
                     ..firmware.clone()
                 },
             );
-            context.registry.firmwares.insert(
-                "unrelated-firmware".into(),
-                Firmware {
-                    package: "test-platform".into(),
-                    resolved_bin: "test-platform".into(),
-                    ..firmware.clone()
-                },
-            );
-            let platform = context.registry.platforms["test-platform"].clone();
-            context
-                .registry
-                .platforms
-                .insert("other-family".into(), platform);
-            context.registry.firmwares.insert(
-                "other-family-firmware".into(),
-                Firmware {
-                    platform: "other-family".into(),
-                    ..firmware
-                },
-            );
-            let root = context.root.clone();
-            let _ = run(
-                context,
-                Task::Clean(FirmwareArgs {
-                    firmware: Some("test-firmware".into()),
-                    select: false,
-                    all_firmwares: false,
-                }),
-                &Ui::new(ColorChoice::Never),
-            )
-            .unwrap();
-            fs::remove_dir_all(root).unwrap();
-            return;
+            context.cargo.insert(id.into(), base.clone());
         }
-
-        let output = Command::new(std::env::current_exe().unwrap())
-            .args([
-                "--exact",
-                "commands::tests::cleaning_a_package_lists_all_affected_firmwares_in_that_platform",
-                "--nocapture",
-            ])
-            .env(MODE, "1")
-            .output()
-            .unwrap();
-        let stdout = String::from_utf8(output.stdout).unwrap();
-        let stderr = String::from_utf8(output.stderr).unwrap();
-        assert!(output.status.success(), "{stdout}\n{stderr}");
-        assert!(
-            stdout.contains("firmwares: other-family-firmware, secondary-firmware, test-firmware)"),
-            "{stdout}"
+        let selection = context.selection("test-firmware").unwrap();
+        let stages = cargo_workflow::clean(&context.registry, &context.cargo, &[selection], false);
+        assert_eq!(stages.len(), 1);
+        let clean = stages[0].clean.as_ref().unwrap();
+        assert_eq!(clean.package.as_deref(), Some("test-firmware"));
+        assert_eq!(
+            clean.firmwares,
+            [
+                "other-family-firmware",
+                "secondary-firmware",
+                "test-firmware"
+            ]
         );
-        assert!(!stdout.contains("unrelated-firmware"), "{stdout}");
-        assert!(stdout.contains("other-family-firmware"), "{stdout}");
-        assert!(
-            stderr.contains("$ cargo clean -p test-firmware"),
-            "{stderr}"
-        );
-        assert!(!stderr.contains("--bin"), "{stderr}");
+        assert!(!stages[0].command.get_args().any(|arg| arg == "--bin"));
+        fs::remove_dir_all(context.root).unwrap();
     }
 
     #[test]
@@ -1111,7 +728,7 @@ mod tests {
         let root = test_root("clean-all-command");
         let context = test_context(root.clone());
         let selection = context.selection("test-firmware").unwrap();
-        let command = clean_command(&context, &selection, true);
+        let command = clean_command(&selection, true);
 
         assert_eq!(
             command.get_args().collect::<Vec<_>>(),
@@ -1127,9 +744,10 @@ mod tests {
             let mut context = test_context(test_root("build-bin-argument"));
             let firmware = context.registry.firmwares.get_mut("test-firmware").unwrap();
             firmware.bin = bin.map(str::to_owned);
-            firmware.resolved_bin = bin.unwrap_or("robot-image").into();
+            context.cargo.get_mut("test-firmware").unwrap().bin =
+                bin.unwrap_or("robot-image").into();
             let selection = context.selection("test-firmware").unwrap();
-            let command = build_command(&context, &selection);
+            let command = build_command(&selection);
             let mut expected = vec![
                 "build",
                 "--target",
@@ -1205,9 +823,9 @@ mod tests {
             let context = Context::load(context.root).unwrap();
 
             let selection = context.selection("test-firmware").unwrap();
-            assert_eq!(selection.firmware.resolved_bin, name);
+            assert_eq!(selection.resolved_bin, name);
             assert_eq!(selection.firmware.bin.as_deref(), bin);
-            build(&context, &Ui::new(ColorChoice::Never), &[selection]).unwrap();
+            build(&[selection]);
             assert!(
                 context
                     .root
@@ -1237,11 +855,16 @@ mod tests {
             )
             .unwrap();
             let selection = context.selection("test-firmware").unwrap();
-            let scopes = scope::resolve(&context, &[selection]).unwrap();
-            let ui = Ui::new(ColorChoice::Never);
+            let scopes = scopes(&context, &[selection]);
             let mut host_stages = 0;
 
-            for Stage(label, mut command) in lint_stages(&context, &ui, &scopes) {
+            for Invocation {
+                target,
+                mut command,
+                ..
+            } in lint_stages(&scopes)
+            {
+                let label = format!("{target:?}");
                 let host = command.get_args().any(|argument| argument == "host-tuple");
                 let output = command.output().unwrap();
                 let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1275,12 +898,15 @@ mod tests {
             )
             .unwrap();
             let selection = context.selection("test-firmware").unwrap();
-            let scopes = scope::resolve(&context, &[selection]).unwrap();
-            let ui = Ui::new(ColorChoice::Never);
-            let stages = test_stages(&context, &ui, &scopes);
+            let scopes = scopes(&context, &[selection]);
+            let stages = test_stages(&scopes);
             assert_eq!(stages.len(), 1, "both packages share one host test stage");
 
-            for Stage(label, mut command) in stages {
+            for Invocation {
+                kind, mut command, ..
+            } in stages
+            {
+                let label = format!("{kind:?}");
                 let output = command.output().unwrap();
                 assert!(
                     !output.status.success(),
@@ -1341,10 +967,17 @@ mod tests {
     fn test_context(root: PathBuf) -> Context {
         Context {
             root: root.clone(),
+            cargo: BTreeMap::from([(
+                "test-firmware".into(),
+                FirmwareCargo {
+                    bin: "test-firmware".into(),
+                    cargo: CargoContext::fixture(&root, "test-platform"),
+                },
+            )]),
             registry: Registry {
-                config_version: crate::config_version::CLI_VERSION.into(),
-                min_polyfw_version: crate::config_version::CLI_VERSION.into(),
-                config: crate::model::Config::default(),
+                config_version: CLI_VERSION.into(),
+                min_polyfw_version: CLI_VERSION.into(),
+                config: Config::default(),
                 platforms: BTreeMap::from([(
                     "test-platform".into(),
                     Platform {
@@ -1363,8 +996,6 @@ mod tests {
                         platform: "test-platform".into(),
                         package: "test-firmware".into(),
                         bin: None,
-                        resolved_bin: "test-firmware".into(),
-                        cargo: crate::model::CargoContext::fixture(&root, "test-platform"),
                         ..Firmware::default()
                     },
                 )]),
@@ -1378,7 +1009,7 @@ mod tests {
         fs::create_dir_all(&root).unwrap();
         fs::write(
             root.join("rust-toolchain.toml"),
-            include_str!("../rust-toolchain.toml"),
+            include_str!("../../rust-toolchain.toml"),
         )
         .unwrap();
         root

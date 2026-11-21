@@ -1,8 +1,8 @@
 use serde_json::json;
 
-use crate::Result;
-use crate::model::Selection;
-use crate::runner::firmware_elf_path;
+use crate::InternalResult as Result;
+use crate::cargo::model::Selection;
+use crate::cargo::runner::firmware_elf_path;
 
 pub(crate) const LAUNCH_FILE: &str = ".vscode/launch.json";
 

@@ -2,13 +2,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use serde::{Serialize, Serializer};
-
-use crate::Result;
-use crate::local_dependencies::LocalDependencies;
-use crate::model::{CargoContext, DependencyKind, Metadata, MetadataPackage, Platform, Selection};
-use crate::registry::{Context, cargo_metadata_for, unique_contexts};
-use crate::runner;
+use super::context::{cargo_metadata_for, same_context, unique_contexts};
+use super::model::{CargoContext, DependencyKind, Metadata, MetadataPackage, Selection};
+use super::runner;
+use crate::InternalResult as Result;
+use crate::config::local_dependencies::LocalDependencies;
+use crate::config::model::Platform;
 
 pub(crate) struct WorkspaceScope {
     pub(crate) platform: Platform,
@@ -17,18 +16,12 @@ pub(crate) struct WorkspaceScope {
     pub(crate) packages: Vec<PackageScope>,
 }
 
-#[derive(Serialize)]
 pub(crate) struct PackageScope {
-    #[serde(rename = "package")]
     pub(crate) name: String,
     pub(crate) manifest_path: PathBuf,
-    #[serde(rename = "target", serialize_with = "serialize_target")]
     pub(crate) embedded: bool,
-    #[serde(skip)]
     pub(crate) id: String,
-    #[serde(skip)]
     pub(crate) host_id: String,
-    #[serde(skip)]
     pub(crate) cargo: CargoContext,
 }
 
@@ -57,24 +50,21 @@ pub(crate) fn host_scopes(scopes: &[WorkspaceScope]) -> Vec<HostScope<'_>> {
         .collect()
 }
 
-fn serialize_target<S: Serializer>(
-    embedded: &bool,
-    serializer: S,
-) -> std::result::Result<S::Ok, S::Error> {
-    serializer.serialize_str(if *embedded { "embedded" } else { "host" })
-}
-
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum CompilationTarget {
     Embedded,
     Host,
 }
 
-pub(crate) fn resolve(context: &Context, selections: &[Selection]) -> Result<Vec<WorkspaceScope>> {
-    let mut resolver = Resolver::new(context)?;
+pub(crate) fn resolve(
+    root: &Path,
+    patterns: &[String],
+    selections: &[Selection],
+) -> Result<Vec<WorkspaceScope>> {
+    let mut resolver = Resolver::new(root, patterns)?;
     let mut scopes = Vec::new();
     for selection in unique_contexts(selections) {
-        scopes.push(resolver.firmware_scope(context, selection, selections)?);
+        scopes.push(resolver.firmware_scope(selection, selections)?);
     }
     Ok(scopes)
 }
@@ -90,10 +80,9 @@ struct Resolver {
 }
 
 impl Resolver {
-    fn new(context: &Context) -> Result<Self> {
-        let root = canonical(&context.root)?;
-        let local_dependencies =
-            LocalDependencies::new(&root, &context.registry.config.local_dependencies)?;
+    fn new(root: &Path, patterns: &[String]) -> Result<Self> {
+        let root = canonical(root)?;
+        let local_dependencies = LocalDependencies::new(&root, patterns)?;
         Ok(Self {
             root,
             local_dependencies,
@@ -190,17 +179,16 @@ impl Resolver {
 
     fn firmware_scope(
         &mut self,
-        _context: &Context,
         selection: &Selection,
         selections: &[Selection],
     ) -> Result<WorkspaceScope> {
-        let cargo = &selection.firmware.cargo;
+        let cargo = &selection.cargo;
         let metadata = self.metadata_for(cargo, Some(&selection.platform))?;
         let mut pending = Vec::new();
         let mut firmware = BTreeSet::new();
         for entry in selections
             .iter()
-            .filter(|entry| crate::registry::same_context(entry, selection))
+            .filter(|entry| same_context(entry, selection))
         {
             let package = metadata
                 .workspace_package(&entry.firmware.package)
@@ -352,9 +340,29 @@ mod tests {
     use std::fs;
     use std::process::Command;
 
-    use clap::ColorChoice;
-
     use super::*;
+    use crate::project::context::Context;
+    use crate::{Check, OutputMode, ProjectInfo, process};
+
+    fn resolve(context: &Context, selections: &[Selection]) -> Result<Vec<WorkspaceScope>> {
+        super::resolve(
+            &context.root,
+            &context.registry.config.local_dependencies,
+            selections,
+        )
+    }
+
+    fn run(context: &Context, check: Check) -> crate::Result<()> {
+        let selections = [context.selection("one")?];
+        let stages = super::super::workflow::check(
+            &context.root,
+            &context.registry.config.local_dependencies,
+            &selections,
+            check,
+        )?;
+        process::run(stages, OutputMode::Inherit, None)?;
+        Ok(())
+    }
 
     #[test]
     fn directory_patterns_filter_dependencies_without_dropping_selected_firmware() {
@@ -395,7 +403,7 @@ mod tests {
                     .firmware
                     .contains(Path::new("platform/test/firmware-a/Cargo.toml"))
             );
-            let report = crate::info::Report::load(&context, Some("one")).unwrap();
+            let report = ProjectInfo::load(&context, Some("one")).unwrap();
             assert_eq!(
                 report.firmwares["one"]
                     .local_dependencies
@@ -441,7 +449,7 @@ mod tests {
             )
             .unwrap();
             let context = Context::load(context.root.clone()).unwrap();
-            let report = crate::info::Report::load(&context, Some("one")).unwrap();
+            let report = ProjectInfo::load(&context, Some("one")).unwrap();
             let packages = report.firmwares["one"].local_dependencies.as_ref().unwrap();
             let outside = packages
                 .iter()
@@ -462,9 +470,6 @@ mod tests {
         fs::remove_dir_all(context.root).unwrap();
         fs::remove_dir_all(external).unwrap();
     }
-    use crate::cli::{FirmwareArgs, Task};
-    use crate::commands;
-    use crate::ui::Ui;
 
     #[test]
     fn a_firmware_scope_follows_all_dependency_kinds_and_keeps_platform_uses_separate() {
@@ -526,8 +531,8 @@ mod tests {
         let context = fixture("shared-package");
         let first = context.selection("one").unwrap();
         let second = context.selection("one-alternate").unwrap();
-        assert_eq!(first.firmware.resolved_bin, "firmware-a");
-        assert_eq!(second.firmware.resolved_bin, "firmware-a-alternate");
+        assert_eq!(first.resolved_bin, "firmware-a");
+        assert_eq!(second.resolved_bin, "firmware-a-alternate");
         assert_ne!(first.id, second.id);
         let expected = resolve(&context, std::slice::from_ref(&first)).unwrap();
         let expected_packages = expected[0]
@@ -562,7 +567,7 @@ mod tests {
             let output = Command::new(std::env::current_exe().unwrap())
                 .args([
                     "--exact",
-                    "scope::tests::lint_checks_other_bins_in_the_selected_firmware_package",
+                    "cargo::scope::tests::lint_checks_other_bins_in_the_selected_firmware_package",
                     "--nocapture",
                 ])
                 .env(MODE, "1")
@@ -588,16 +593,7 @@ mod tests {
             format!("{source}\ncompile_error!(\"another firmware binary\");\n"),
         )
         .unwrap();
-        let error = commands::run(
-            context,
-            Task::Lint(FirmwareArgs {
-                firmware: Some("one".into()),
-                select: false,
-                all_firmwares: false,
-            }),
-            &Ui::new(ColorChoice::Never),
-        )
-        .unwrap_err();
+        let error = run(&context, Check::Lint).unwrap_err();
         assert!(error.to_string().starts_with("cargo clippy"), "{error}");
         assert!(error.to_string().contains("failed with"), "{error}");
         fs::remove_dir_all(root).unwrap();
@@ -607,23 +603,15 @@ mod tests {
     fn a_firmware_can_verify_with_std_helpers_without_checking_unrelated_packages() {
         let context = fixture("verify");
         let root = context.root.clone();
-        let _ = commands::run(
-            context,
-            Task::Verify(FirmwareArgs {
-                firmware: Some("one".into()),
-                select: false,
-                all_firmwares: false,
-            }),
-            &Ui::new(ColorChoice::Never),
-        )
-        .unwrap();
+        run(&context, Check::Verify).unwrap();
         fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
     fn registry_and_git_sources_are_excluded_before_their_manifest_paths_are_read() {
         let context = fixture("sources");
-        let mut resolver = Resolver::new(&context).unwrap();
+        let mut resolver =
+            Resolver::new(&context.root, &context.registry.config.local_dependencies).unwrap();
         let mut package = MetadataPackage {
             id: "third-party".into(),
             name: "third-party".into(),
@@ -659,7 +647,8 @@ mod tests {
             context.root.join("alias"),
         )
         .unwrap();
-        let mut resolver = Resolver::new(&context).unwrap();
+        let mut resolver =
+            Resolver::new(&context.root, &context.registry.config.local_dependencies).unwrap();
         let mut package = MetadataPackage {
             id: "symlinked".into(),
             name: "symlinked".into(),
@@ -814,7 +803,7 @@ mod tests {
         assert_ne!(duplicates[0].manifest_path, duplicates[1].manifest_path);
         assert_ne!(duplicates[0].id, duplicates[1].id);
         assert!(duplicates.iter().all(|package| package.embedded));
-        let report = crate::info::Report::load(&context, Some("one")).unwrap();
+        let report = ProjectInfo::load(&context, Some("one")).unwrap();
         assert_eq!(
             report.firmwares["one"]
                 .local_dependencies
@@ -826,16 +815,7 @@ mod tests {
             1
         );
         let root = context.root.clone();
-        let _ = commands::run(
-            context,
-            Task::Verify(FirmwareArgs {
-                firmware: Some("one".into()),
-                select: false,
-                all_firmwares: false,
-            }),
-            &Ui::new(ColorChoice::Never),
-        )
-        .unwrap();
+        run(&context, Check::Verify).unwrap();
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -911,7 +891,7 @@ mod tests {
         fs::create_dir_all(workspace.join(".cargo")).unwrap();
         fs::write(
             root.join("rust-toolchain.toml"),
-            include_str!("../rust-toolchain.toml"),
+            include_str!("../../rust-toolchain.toml"),
         )
         .unwrap();
         fs::write(
@@ -1047,7 +1027,7 @@ mod tests {
         fs::create_dir_all(outside.join("src")).unwrap();
         fs::write(
             outside.join("rust-toolchain.toml"),
-            include_str!("../rust-toolchain.toml"),
+            include_str!("../../rust-toolchain.toml"),
         )
         .unwrap();
         fs::write(

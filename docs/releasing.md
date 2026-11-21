@@ -47,7 +47,7 @@ fixtures need `thumbv7em-none-eabihf`.
 1. Update `[package].version` in `Cargo.toml`. Use a full stable version or a SemVer prerelease,
    for example `0.2.0-rc.1` or `0.2.0-beta.1`.
    Review `MIN_SUPPORTED_CONFIG_VERSION` and `MIN_REQUIRED_CLI_VERSION` in
-   `src/config_version.rs` according to the
+   `src/config/version.rs` according to the
    [configuration compatibility policy](configuration.md#configuration-compatibility).
    Keep them unchanged for compatible releases. Advance the configuration floor when older
    contracts no longer retain their meaning, and advance the authoring minimum when newer

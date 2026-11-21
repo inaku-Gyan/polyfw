@@ -110,6 +110,19 @@ Firmware operations need Cargo and rustup, plus the toolchain, targets, rustfmt 
 required by the consuming project. Flashing and monitoring also need
 [probe-rs](https://probe.rs/docs/getting-started/installation/) on `PATH`.
 
+## Use as a Rust dependency
+
+Host programs can inspect a project, manage its saved selection, and run Cargo builds and checks.
+Use the library with the CLI feature disabled in the dependency declaration.
+
+```toml
+[dependencies]
+polyfw = { version = "0.3", default-features = false }
+```
+
+Start with `polyfw::Project::open` for a known root or `polyfw::Project::discover` for a directory
+inside a project. For loading and execution behavior, see [Rust library](docs/design.md#rust-library).
+
 ## Documentation
 
 | Task | Guide |

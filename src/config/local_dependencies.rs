@@ -2,7 +2,7 @@ use std::path::{Component, Path, PathBuf};
 
 use glob::{MatchOptions, Pattern};
 
-use crate::Result;
+use crate::InternalResult as Result;
 
 pub(crate) struct LocalDependencies {
     directories: Vec<DirectoryPattern>,

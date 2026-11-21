@@ -1,14 +1,29 @@
-use std::error::Error;
 use std::fs::{self, File};
 use std::io::{self, ErrorKind, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use crate::Result;
-use crate::config_version::{CLI_VERSION, MIN_REQUIRED_CLI_VERSION};
-use crate::registry::{REGISTRY_FILE, STATE_DIRECTORY};
-use crate::ui::Ui;
+use crate::config::REGISTRY_FILE;
+use crate::config::version::{CLI_VERSION, MIN_REQUIRED_CLI_VERSION};
+use crate::{BoxError, Error, InternalResult as Result};
 
-pub(crate) fn run(root: &Path, ui: &Ui) -> Result<()> {
+use super::{context::exact_root, selection::STATE_DIRECTORY};
+
+/// Paths prepared by initialization, including any preexisting state ignore file.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct InitReport {
+    pub configuration: PathBuf,
+    pub state_ignore: PathBuf,
+    pub state_ignore_created: bool,
+}
+
+/// Creates a configuration template and state ignore file in an exact existing directory.
+pub fn initialize(root: impl AsRef<Path>) -> crate::Result<InitReport> {
+    let root = exact_root(root.as_ref())?;
+    run(&root).map_err(|error| Error::new(crate::ErrorKind::Initialization, error))
+}
+
+fn run(root: &Path) -> Result<InitReport> {
     let path = root.join(REGISTRY_FILE);
     // Reserve the configuration path before touching state to exclude concurrent initializers.
     let file = File::create_new(&path).map_err(|error| {
@@ -42,8 +57,11 @@ pub(crate) fn run(root: &Path, ui: &Ui) -> Result<()> {
         }
         return Err(rollback(error, &path, fs::remove_file(&path)));
     }
-    ui.initialized(&path, &ignore_path, ignore_created);
-    Ok(())
+    Ok(InitReport {
+        configuration: path,
+        state_ignore: ignore_path,
+        state_ignore_created: ignore_created,
+    })
 }
 
 fn create_state_directory(path: &Path) -> Result<bool> {
@@ -73,7 +91,7 @@ fn write_created_file(mut file: File, path: &Path, contents: &[u8]) -> Result<()
         .map_err(|error| format!("could not write {}: {error}", path.display()).into())
 }
 
-fn rollback(error: Box<dyn Error>, path: &Path, result: io::Result<()>) -> Box<dyn Error> {
+fn rollback(error: BoxError, path: &Path, result: io::Result<()>) -> BoxError {
     match result {
         Err(rollback) if rollback.kind() != ErrorKind::NotFound => format!(
             "{error}\nCould not remove {} during rollback: {rollback}",
@@ -86,7 +104,7 @@ fn rollback(error: Box<dyn Error>, path: &Path, result: io::Result<()>) -> Box<d
 
 fn template() -> String {
     let source = format!(
-        include_str!("../assets/polyfw.toml"),
+        include_str!("../../assets/polyfw.toml"),
         CLI_VERSION = CLI_VERSION,
         MIN_REQUIRED_CLI_VERSION = MIN_REQUIRED_CLI_VERSION,
     );
@@ -105,19 +123,19 @@ fn template() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config_version;
-    use crate::model::Registry;
+    use crate::config::model::Registry;
+    use crate::config::version;
 
     #[test]
     fn the_template_uses_the_release_contract_and_authoring_minimum() {
         let source = template();
-        config_version::preflight(&source, Path::new("polyfw.toml")).unwrap();
+        version::preflight(&source, Path::new("polyfw.toml")).unwrap();
         let registry: Registry = toml::from_str(&source).unwrap();
         assert_eq!(registry.config_version, CLI_VERSION);
         assert_eq!(registry.min_polyfw_version, MIN_REQUIRED_CLI_VERSION);
 
         let schema: serde_json::Value =
-            serde_json::from_str(&crate::registry::schema_source().unwrap()).unwrap();
+            serde_json::from_str(&crate::configuration_schema().unwrap()).unwrap();
         assert_eq!(
             source.lines().next().unwrap().strip_prefix("#:schema "),
             schema["$id"].as_str()
