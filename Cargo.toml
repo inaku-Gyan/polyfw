@@ -17,7 +17,7 @@ exclude = [
     "docs/research/",
     "dist/",
     "examples/",
-    "tests/examples.rs",
+    "tests/demos.rs",
 ]
 
 [package.metadata.binstall]

@@ -21,4 +21,4 @@ just run --project-root "$project" build --all-firmwares --release
 
 - [Usage](../docs/usage.md)
 - [Project configuration](../docs/configuration.md)
-- [Development and example integration tests](../docs/development.md#maintain-the-examples)
+- [Development and demo project tests](../docs/development.md#maintain-the-examples)

@@ -62,7 +62,7 @@ use the consuming workspaces' pins rather than inheriting the compiler used to r
 | `src/process.rs` | Stage execution, progress and child output |
 | `tests/library.rs` | Public Rust API exercised as a downstream caller |
 | `tests/project_root.rs`, `tests/standalone.rs` | Executable-level project isolation and external-tool boundaries |
-| `examples/`, `tests/examples.rs` | Minimal Cortex-M consumers reused by executable-level integration tests |
+| `examples/`, `tests/demos.rs` | Self-contained Cortex-M projects and their end-to-end tests |
 | `.github/workflows/release.yml` | Tag validation, native binary archives and publication |
 
 Edit the initialization template in `assets/polyfw.toml`. Its schema directive points to
@@ -129,6 +129,14 @@ Ordinary fixture builds may emit unused-dependency warnings. CI explicitly allow
 warnings; the repository's Clippy command still uses `-D warnings`. Hardware command and debugger
 fixtures establish generated arguments/settings, not physical device behavior.
 
+## Run focused tests
+
+| Command | Coverage |
+| --- | --- |
+| `just test-lib` | Library unit tests, the public Rust API integration test and doctests with default features disabled |
+| `just test-cli` | Binary unit tests and the `standalone`, `project_root` and `platforms` integration targets |
+| `just test-demos` | End-to-end tests against copies of the three demo projects |
+
 ## Maintain the examples
 
 Each example directory is a self-contained consuming project. Copy the whole project directory
@@ -138,17 +146,17 @@ pin through directory ancestry; add a local pin when a workspace needs different
 requirements. See [compiler isolation](design.md#workspace-and-compiler-isolation) for how the
 working directory determines toolchain selection.
 
-After [setting up the checkout](#set-up-a-checkout), run the example integration tests from the
-repository root:
+Run the demo project tests from the repository root after setting up the checkout.
+[Checkout setup](#set-up-a-checkout)
 
 ```sh
-just test-examples
+just test-demos
 ```
 
-Pass test-name filters and test-runner options directly, for example
-`just test-examples minimal --nocapture`. The recipe supplies Cargo's `--` separator.
+Use `just test-demos minimal --nocapture` to run the minimal project's tests with live output.
+The recipe forwards test-name filters and harness options after Cargo's `--` separator.
 
-`tests/examples.rs` copies the checked-in projects into temporary directories and invokes the
+`tests/demos.rs` copies the checked-in projects into temporary directories and invokes the
 built polyfw executable. It exercises real MCU builds, host library tests, selection, external
 workspace members and dependency scopes. The tests check reported artifact paths, platform
 CPU/chip values and linked 32-bit ARM ELF executables with Thumb entry points in flash, including
