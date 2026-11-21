@@ -120,8 +120,45 @@ Use the library with the CLI feature disabled in the dependency declaration.
 polyfw = { version = "0.3", default-features = false }
 ```
 
-Start with `polyfw::Project::open` for a known root or `polyfw::Project::discover` for a directory
-inside a project. For loading and execution behavior, see [Rust library](docs/design.md#rust-library).
+Put this example in your host package's `src/main.rs` and run
+`cargo run -- /path/to/firmware-project`. The program opens the supplied root or searches from its
+working directory when no path is given. It uses the minimal demo's `hello` firmware ID. Use an ID
+from your project when adapting the example.
+
+```rust
+use polyfw::{Check, Options, OutputMode, Profile, Project};
+
+fn main() -> polyfw::Result<()> {
+    let project = match std::env::args_os().nth(1) {
+        Some(root) => Project::open(root)?,
+        None => Project::discover(".")?,
+    };
+    println!("Project: {}", project.root().display());
+
+    for (id, platform) in project.platforms() {
+        println!("Platform {id}: {}", platform.target);
+    }
+    for firmware in project.firmwares() {
+        println!("Firmware {} on {}", firmware.id, firmware.platform);
+    }
+    if let Some(saved) = project.saved_selection()? {
+        let profile = saved.profile.as_ref().map_or("default", Profile::name);
+        println!("Saved selection: {} ({profile})", saved.firmware);
+    }
+
+    let firmware = "hello";
+    let profile: Profile = "release".parse()?;
+    let output = OutputMode::Inherit;
+    project.check(Check::Test, firmware.into(), Options::new(output))?;
+    let report = project.build(firmware.into(), Some(&profile), Options::new(output))?;
+    for artifact in report.artifacts {
+        println!("ELF {} (present: {})", artifact.path.display(), artifact.exists);
+    }
+    Ok(())
+}
+```
+
+For project loading, selection and process behavior, see [Rust library](docs/design.md#rust-library).
 
 ## Documentation
 
