@@ -1,17 +1,15 @@
 <h1 align="center">polyfw</h1>
 <p align="center">One CLI to build, check, flash, and monitor embedded Rust firmware.</p>
 <p align="center">
-  <a href="docs/development.md#set-up-a-checkout"><img alt="Rust 1.100+" src="https://img.shields.io/badge/Rust-1.100%2B-dea584?logo=rust"></a>
-  <a href="docs/development.md#set-up-a-checkout"><img alt="Rust edition 2024" src="https://img.shields.io/badge/edition-2024-dea584"></a>
   <a href="https://crates.io/crates/polyfw"><img alt="crates.io version" src="https://img.shields.io/crates/v/polyfw"></a>
   <a href="https://github.com/inaku-Gyan/polyfw/actions/workflows/ci.yml"><img alt="CI status" src="https://github.com/inaku-Gyan/polyfw/actions/workflows/ci.yml/badge.svg?branch=main"></a>
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-blue"></a>
 </p>
-<p align="center">
-  <a href="#quick-start">Quick start</a> ·
-  <a href="#install">Install</a> ·
-  <a href="#documentation">Documentation</a>
-</p>
+
+- [Features](#features)
+- [Quick start](#quick-start)
+- [Install](#install)
+- [Documentation](#documentation)
 
 ## Features
 
