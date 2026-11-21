@@ -55,10 +55,15 @@ impl Ui {
         eprintln!("{} {error}", style("error:").red().bold());
     }
 
-    pub(crate) fn initialized(&self, path: &Path) {
+    pub(crate) fn initialized(&self, path: &Path, ignore: &Path, ignore_created: bool) {
         println!("{} {}", style("created").green().bold(), path.display());
+        if ignore_created {
+            println!("{} {}", style("created").green().bold(), ignore.display());
+        } else {
+            println!("Using existing ignore rules in {}.", ignore.display());
+        }
         println!("Edit the TODO values in polyfw.toml to match your Cargo firmware project.");
-        println!("Add /.polyfw-state/, /target/ and /.vscode/launch.json to its .gitignore.");
+        println!("Add /target/ and /.vscode/launch.json to the project's .gitignore.");
         println!("Then run polyfw info from that directory, or pass --project-root <DIR>.");
     }
 

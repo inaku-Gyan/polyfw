@@ -155,11 +155,15 @@ The schema link and `config-version` use the running CLI's release version;
 `min-polyfw-version` uses its conservative
 [authoring minimum](#configuration-compatibility).
 
-The command is non-interactive, creates only `polyfw.toml` and needs no Cargo, Rust or network
-access. It does not inspect Cargo manifests or change source, state, editor or Git files.
-Successful creation does not validate your firmware project. After editing the template, add the
-[ignore entries below](#register-the-firmware-targets) yourself and run `polyfw info` to validate
-the configuration and Cargo setup.
+Alongside the template, `init` creates `.polyfw-state/.gitignore` with a single `*` pattern.
+An existing regular file at that path supplies the project's custom rules. A path conflict, such
+as a symbolic link at `.polyfw-state` or its `.gitignore`, fails initialization. If initialization
+fails, `init` reports the affected path and rolls back the paths it created so you can fix the
+issue and retry. On success, it lists the files it created.
+
+The command is non-interactive and works without Cargo, Rust, Git or network access. After editing
+the template, add the [ignore entries below](#register-the-firmware-targets) and run `polyfw info`
+to validate the configuration and Cargo setup.
 
 ## Register the firmware targets
 
@@ -287,13 +291,16 @@ Most project commands resolve every registered firmware before acting, so a brok
 prevent a command for another firmware from starting. Consistency checking only applies to the
 selected target-side build/check operations.
 
-Add generated files to the consuming project's `.gitignore`:
+The consuming project's root `.gitignore` should cover Cargo's default build output and the
+generated VS Code launch configuration.
 
 ```gitignore
-/.polyfw-state/
 /target/
 /.vscode/launch.json
 ```
+
+The `*` pattern also ignores `.polyfw-state/.gitignore` itself. To share the state ignore rule with
+every clone, add `/.polyfw-state/` to the project's root `.gitignore` and commit that entry.
 
 Then inspect the registry and run the first checks:
 

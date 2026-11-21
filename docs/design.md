@@ -27,8 +27,10 @@ from the caller's directory. Project discovery canonicalizes an explicit root or
 ancestor containing polyfw.toml; an invalid selected project fails without fallback.
 
 `init` runs before loading configuration and uses the exact current/explicit existing directory.
-Exclusive creation enforces the [initializer's no-overwrite contract](configuration.md#initialize-a-configuration).
-It writes only polyfw.toml, using release constants, and needs no Cargo, state or hardware context.
+It reserves `polyfw.toml` by exclusive creation before preparing the
+[local state ignore file](configuration.md#initialize-a-configuration) and writing the template
+with release constants. On failure it rolls back newly created paths. It needs no Cargo or
+hardware context.
 
 Loading has two stages:
 

@@ -220,14 +220,14 @@ impl RttChannelMode {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Task {
-    /// Create a polyfw.toml template for an existing Cargo firmware project.
+    /// Create a polyfw.toml template and local Git ignore rules.
     ///
     /// Write in the current directory, or the existing directory named by
     /// --project-root, without searching ancestors. Refuse to overwrite any existing
-    /// polyfw.toml. Edit the TODO values before running polyfw info to validate the
-    /// project. Creates only the configuration; does not inspect Cargo or change
-    /// source, state, editor or Git files. Needs no project configuration, external
-    /// tools or network access and never prompts.
+    /// polyfw.toml. Create .polyfw-state/.gitignore with a single * pattern, or use
+    /// a regular file that already exists there. Print the paths created.
+    /// Edit the TODO values before running polyfw info to validate the project.
+    /// Runs without project configuration, external tools, network access or prompts.
     #[command(
         verbatim_doc_comment,
         after_long_help = "Examples:

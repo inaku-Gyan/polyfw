@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 #[test]
@@ -49,7 +49,7 @@ fn help_version_and_schema_work_without_a_project_or_rust_tools() {
 }
 
 #[test]
-fn initialization_creates_only_a_template_without_tools_or_ancestor_discovery() {
+fn initialization_creates_template_and_state_ignore_without_tools_or_ancestor_discovery() {
     let fixture = Fixture::new("init-current-directory");
     fs::write(
         fixture.root.join("polyfw.toml"),
@@ -69,20 +69,21 @@ fn initialization_creates_only_a_template_without_tools_or_ancestor_discovery() 
         .unwrap();
     succeeded(&output);
     let message = String::from_utf8(output.stdout).unwrap();
+    let canonical_root = root.canonicalize().unwrap();
+    let state = canonical_root.join(".polyfw-state");
+    let ignore = state.join(".gitignore");
+    for path in [canonical_root.join("polyfw.toml"), ignore.clone()] {
+        let expected = format!("created {}", path.display());
+        assert!(message.lines().any(|line| line == expected), "{message}");
+    }
+    assert!(message.contains("TODO"), "{message}");
     assert!(
-        message.contains(
-            &root
-                .canonicalize()
-                .unwrap()
-                .join("polyfw.toml")
-                .display()
-                .to_string()
-        ),
+        message.contains("Add /target/ and /.vscode/launch.json"),
         "{message}"
     );
-    assert!(message.contains("TODO"), "{message}");
-    assert!(message.contains(".gitignore"), "{message}");
     assert!(message.contains("polyfw info"), "{message}");
+    assert_eq!(fs::read(ignore).unwrap(), b"*\n");
+    assert_eq!(fs::read_dir(state).unwrap().count(), 1);
 
     // Exercise version, model and structural validation without invoking Cargo.
     let output = fixture
@@ -109,7 +110,10 @@ fn initialization_creates_only_a_template_without_tools_or_ancestor_discovery() 
         .map(|entry| entry.unwrap().file_name())
         .collect::<Vec<_>>();
     entries.sort();
-    assert_eq!(entries, [".gitignore", "Cargo.toml", "polyfw.toml"]);
+    assert_eq!(
+        entries,
+        [".gitignore", ".polyfw-state", "Cargo.toml", "polyfw.toml"]
+    );
 }
 
 #[test]
@@ -146,7 +150,12 @@ fn initialization_uses_the_exact_explicit_directory_relative_to_the_caller() {
         }
         succeeded(&command.output().unwrap());
         assert!(destination.join("polyfw.toml").is_file());
+        assert_eq!(
+            fs::read(destination.join(".polyfw-state/.gitignore")).unwrap(),
+            b"*\n"
+        );
         assert!(!caller.join("polyfw.toml").exists());
+        assert!(!caller.join(".polyfw-state").exists());
         assert_eq!(
             fs::read_to_string(fixture.root.join("polyfw.toml")).unwrap(),
             "invalid ancestor configuration"
@@ -199,6 +208,7 @@ fn initialization_preserves_existing_configuration_files_and_directories() {
             assert!(error.contains("already exists"), "{error}");
         }
         assert_eq!(fs::read(protected).unwrap(), original);
+        assert!(!fixture.root.join(".polyfw-state").exists());
     }
 }
 
@@ -227,7 +237,89 @@ fn initialization_preserves_existing_configuration_symlinks_including_dangling_o
                 "existing configuration"
             );
         }
+        assert!(!fixture.root.join(".polyfw-state").exists());
     }
+}
+
+#[test]
+fn initialization_uses_an_existing_state_ignore_file() {
+    let fixture = Fixture::new("init-existing-ignore");
+    let root = fixture.root.canonicalize().unwrap();
+    let state = root.join(".polyfw-state");
+    let ignore = state.join(".gitignore");
+    fs::create_dir(&state).unwrap();
+    fs::write(&ignore, b"selected\r\n").unwrap();
+
+    let output = fixture.command().arg("init").output().unwrap();
+    succeeded(&output);
+    let message = String::from_utf8(output.stdout).unwrap();
+    let created = format!("created {}", root.join("polyfw.toml").display());
+    assert_eq!(
+        message
+            .lines()
+            .filter(|line| line.starts_with("created "))
+            .collect::<Vec<_>>(),
+        [created.as_str()]
+    );
+    assert!(message.contains(&format!(
+        "Using existing ignore rules in {}",
+        ignore.display()
+    )));
+    assert_eq!(fs::read(ignore).unwrap(), b"selected\r\n");
+}
+
+#[test]
+fn initialization_can_be_retried_after_state_path_conflicts() {
+    let fixture = Fixture::new("init-state-path-conflicts");
+    let state = fixture.root.canonicalize().unwrap().join(".polyfw-state");
+    fs::write(&state, b"existing file").unwrap();
+    assert_init_state_conflict(&fixture, &state);
+    assert_eq!(fs::read(&state).unwrap(), b"existing file");
+    fs::remove_file(&state).unwrap();
+
+    let ignore = state.join(".gitignore");
+    fs::create_dir_all(&ignore).unwrap();
+    assert_init_state_conflict(&fixture, &ignore);
+    fs::remove_dir(&ignore).unwrap();
+
+    succeeded(&fixture.command().arg("init").output().unwrap());
+    assert!(fixture.root.join("polyfw.toml").is_file());
+    assert_eq!(fs::read(ignore).unwrap(), b"*\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn initialization_rejects_symlinked_state_paths() {
+    use std::os::unix::fs::symlink;
+
+    let fixture = Fixture::new("init-state-symlinks");
+    let root = fixture.root.canonicalize().unwrap();
+    let target = root.join("target-directory");
+    fs::create_dir(&target).unwrap();
+    let state = root.join(".polyfw-state");
+    symlink(&target, &state).unwrap();
+    assert_init_state_conflict(&fixture, &state);
+    assert_eq!(fs::read_link(&state).unwrap(), target);
+    assert!(!target.join(".gitignore").exists());
+    fs::remove_file(&state).unwrap();
+
+    fs::create_dir(&state).unwrap();
+    let ignore = state.join(".gitignore");
+    let target = root.join("target-file");
+    fs::write(&target, b"existing rules").unwrap();
+    symlink(&target, &ignore).unwrap();
+    assert_init_state_conflict(&fixture, &ignore);
+    assert_eq!(fs::read_link(ignore).unwrap(), target);
+    assert_eq!(fs::read(target).unwrap(), b"existing rules");
+}
+
+fn assert_init_state_conflict(fixture: &Fixture, path: &Path) {
+    let output = fixture.command().arg("init").output().unwrap();
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    let error = String::from_utf8(output.stderr).unwrap();
+    assert!(error.contains(&path.display().to_string()), "{error}");
+    assert!(!fixture.root.join("polyfw.toml").exists());
 }
 
 #[test]

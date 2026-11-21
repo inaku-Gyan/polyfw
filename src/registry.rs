@@ -12,8 +12,8 @@ use crate::profile::Profile;
 use crate::runner;
 use crate::vscode;
 
-const REGISTRY_FILE: &str = "polyfw.toml";
-const STATE_DIRECTORY: &str = ".polyfw-state";
+pub(crate) const REGISTRY_FILE: &str = "polyfw.toml";
+pub(crate) const STATE_DIRECTORY: &str = ".polyfw-state";
 const SELECTION_FILE: &str = ".polyfw-state/selected";
 
 pub(crate) fn project_root(explicit: Option<&Path>, working_directory: &Path) -> Result<PathBuf> {
