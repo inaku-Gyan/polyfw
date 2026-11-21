@@ -19,10 +19,19 @@ check:
     cargo test --locked
     cargo test --locked --no-default-features --test library
 
-# Run example integration tests; pass test-name filters and test-runner options directly.
+# Run library unit tests, API integration tests and doctests with default features disabled.
+test-lib:
+    cargo test --locked --no-default-features --lib --test library
+    cargo test --locked --no-default-features --doc
+
+# Run binary unit tests and CLI integration tests.
+test-cli:
+    cargo test --locked --bin polyfw --test standalone --test project_root --test platforms
+
+# Run the demo project tests with optional test harness arguments.
 [positional-arguments]
-test-examples *args:
-    cargo test --locked --test examples -- "$@"
+test-demos *args:
+    cargo test --locked --test demos -- "$@"
 
 # Format Rust sources and apply Clippy fixes; review the resulting diff.
 fix:

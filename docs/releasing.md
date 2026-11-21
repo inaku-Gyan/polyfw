@@ -75,7 +75,7 @@ fixtures need `thumbv7em-none-eabihf`.
    `--allow-dirty` permits reviewing uncommitted preparation changes. The dry run builds the
    extracted crate without uploading. The actual publication uses a clean committed tree.
    Source, README, license, embedded schema, self-contained Rust tests and the `docs/` guides are
-   included. The ARM examples and their `tests/examples.rs` integration test stay in the source
+   included. The ARM examples and their `tests/demos.rs` integration test stay in the source
    checkout and are excluded together from the crate. `Cargo.toml` defines the excluded files,
    including `docs/adr/` and `docs/research/`.
    Guide and README links use relative paths for offline reading.
