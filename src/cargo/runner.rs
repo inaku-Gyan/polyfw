@@ -1,10 +1,10 @@
-use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::model::{CargoContext, Platform, Selection};
+use crate::config::model::Platform;
+
+use super::model::{CargoContext, Selection};
 use crate::profile::Profile;
-use crate::ui::{Progress, Ui};
 
 pub(crate) fn workspace_cargo(workspace: &Path) -> Command {
     let command = workspace_command(workspace, "cargo");
@@ -58,7 +58,7 @@ pub(crate) fn resolve_target(
     working_dir: &Path,
     target: &str,
     build_dir: bool,
-) -> crate::Result<String> {
+) -> crate::InternalResult<String> {
     let mut host = None;
     if target == "host-tuple" || build_dir {
         let output = workspace_cargo(working_dir).arg("-vV").output()?;
@@ -111,16 +111,15 @@ pub(crate) fn resolve_target(
 }
 
 pub(crate) fn firmware_elf_path(selection: &Selection) -> PathBuf {
-    let bin = if selection.firmware.cargo.target.contains("-windows-") {
-        format!("{}.exe", selection.firmware.resolved_bin)
+    let bin = if selection.cargo.target.contains("-windows-") {
+        format!("{}.exe", selection.resolved_bin)
     } else {
-        selection.firmware.resolved_bin.clone()
+        selection.resolved_bin.clone()
     };
     selection
-        .firmware
         .cargo
         .target_dir
-        .join(&selection.firmware.cargo.target)
+        .join(&selection.cargo.target)
         .join(
             selection
                 .profile
@@ -130,44 +129,12 @@ pub(crate) fn firmware_elf_path(selection: &Selection) -> PathBuf {
         .join(bin)
 }
 
-fn render_command(command: &Command) -> String {
-    std::iter::once(command.get_program())
-        .chain(command.get_args())
-        .map(|argument| argument.to_string_lossy())
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-pub(crate) fn run_command(ui: &Ui, mut command: Command) -> io::Result<()> {
-    let rendered = render_command(&command);
-    ui.command(&rendered);
-    let status = command.status()?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(io::Error::other(format!("{rendered} failed with {status}")))
-    }
-}
-
-pub(crate) fn run_command_with_progress(
-    ui: &Ui,
-    progress: &mut Progress<'_>,
-    label: &str,
-    command: Command,
-) -> io::Result<()> {
-    let step = progress.start(label);
-    let result = run_command(ui, command);
-    progress.finish(step, result.is_ok());
-    result
-}
-
 #[cfg(test)]
 mod tests {
     use std::fs;
 
     use super::*;
-    use crate::model::Firmware;
-    use clap::ColorChoice;
+    use crate::config::model::Firmware;
 
     #[test]
     fn temporary_projects_use_the_project_toolchain_with_an_unusable_ancestor() {
@@ -184,11 +151,11 @@ mod tests {
         )
         .unwrap();
         for test in [
-            "commands::tests::host_lint_rejects_mistakes_in_both_platform_and_firmware_tests",
-            "scope::tests::a_firmware_can_verify_with_std_helpers_without_checking_unrelated_packages",
-            "scope::tests::same_named_dependencies_in_different_workspaces_are_both_verified",
-            "scope::tests::external_directory_patterns_include_packages_and_their_own_host_helpers",
-            "scope::tests::lint_checks_other_bins_in_the_selected_firmware_package",
+            "project::workflow::tests::host_lint_rejects_mistakes_in_both_platform_and_firmware_tests",
+            "cargo::scope::tests::a_firmware_can_verify_with_std_helpers_without_checking_unrelated_packages",
+            "cargo::scope::tests::same_named_dependencies_in_different_workspaces_are_both_verified",
+            "cargo::scope::tests::external_directory_patterns_include_packages_and_their_own_host_helpers",
+            "cargo::scope::tests::lint_checks_other_bins_in_the_selected_firmware_package",
         ] {
             let output = Command::new(std::env::current_exe().unwrap())
                 .args(["--exact", test, "--nocapture"])
@@ -207,56 +174,18 @@ mod tests {
     }
 
     #[test]
-    fn command_runners_preserve_launch_errors_and_failed_exit_statuses() {
-        let ui = Ui::new(ColorChoice::Never);
-        for with_progress in [false, true] {
-            for missing in [false, true] {
-                let mut command = if missing {
-                    Command::new(
-                        std::env::temp_dir()
-                            .join(format!("polyfw-missing-executable-{}", std::process::id())),
-                    )
-                } else {
-                    Command::new("rustc")
-                };
-                command.arg("--polyfw-invalid-argument");
-                let rendered = render_command(&command);
-                let result = if with_progress {
-                    run_command_with_progress(
-                        &ui,
-                        &mut Progress::new(&ui, 1),
-                        "test command",
-                        command,
-                    )
-                } else {
-                    run_command(&ui, command)
-                };
-                let error = result.unwrap_err();
-                if missing {
-                    assert_eq!(error.kind(), io::ErrorKind::NotFound);
-                    assert!(error.raw_os_error().is_some());
-                } else {
-                    assert_eq!(error.kind(), io::ErrorKind::Other);
-                    assert!(error.to_string().contains("failed with"), "{error}");
-                    assert!(error.to_string().starts_with(&rendered), "{error}");
-                }
-            }
-        }
-    }
-
-    #[test]
     fn firmware_paths_select_the_platform_target_profile_and_resolved_binary() {
         let root = Path::new("repository");
         let mut selection = Selection {
             id: "controller".into(),
             profile: None,
+            cargo: CargoContext::fixture(root, "firmware-family"),
+            resolved_bin: "firmware-package".into(),
             firmware: Firmware {
                 description: Some("test firmware".into()),
                 platform: "firmware-family".into(),
                 package: "firmware-package".into(),
                 bin: None,
-                resolved_bin: "firmware-package".into(),
-                cargo: CargoContext::fixture(root, "firmware-family"),
                 ..Firmware::default()
             },
             platform: Platform {
@@ -272,7 +201,7 @@ mod tests {
             firmware_elf_path(&selection),
             target_dir.join("debug/firmware-package")
         );
-        selection.firmware.resolved_bin = "robot-image".into();
+        selection.resolved_bin = "robot-image".into();
         selection.profile = Some("release".parse().unwrap());
         assert_eq!(
             firmware_elf_path(&selection),
@@ -290,9 +219,9 @@ mod tests {
         let output = Command::new(std::env::current_exe().unwrap())
             .args([
                 "--exact",
-                "runner::tests::cargo_uses_the_platform_target_and_compiler_configuration",
-                "commands::tests::grouped_checks_preserve_distinct_execution_contexts_in_one_workspace",
-                "scope::tests::lint_checks_other_bins_in_the_selected_firmware_package",
+                "cargo::runner::tests::cargo_uses_the_platform_target_and_compiler_configuration",
+                "project::workflow::tests::grouped_checks_preserve_distinct_execution_contexts_in_one_workspace",
+                "cargo::scope::tests::lint_checks_other_bins_in_the_selected_firmware_package",
             ])
             .env_remove("CARGO_ENCODED_RUSTFLAGS")
             .env("RUSTFLAGS", "--cfg ambient_fixture_flag")
@@ -321,7 +250,7 @@ mod tests {
         fs::create_dir_all(workspace.join(".cargo")).unwrap();
         fs::write(
             root.join("rust-toolchain.toml"),
-            include_str!("../rust-toolchain.toml"),
+            include_str!("../../rust-toolchain.toml"),
         )
         .unwrap();
         fs::write(

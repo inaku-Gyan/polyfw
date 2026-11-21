@@ -1,14 +1,16 @@
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
+use std::time::Instant;
+
+use polyfw::{Options, Profile, Project};
 
 use crate::Result;
-use crate::cli::{MonitorArgs, ProbeArgs};
-use crate::model::Selection;
-use crate::registry::Context;
-use crate::runner::{self, run_command, run_command_with_progress};
-use crate::ui::{self, Progress, Ui};
+use crate::args::{MonitorArgs, ProbeArgs};
+use crate::dispatch::choice;
+use crate::ui::Ui;
 
+#[derive(Clone, Copy)]
 pub(crate) enum Action<'a> {
     Run { monitor: &'a MonitorArgs },
     Flash,
@@ -34,33 +36,73 @@ pub(crate) fn list(root: &Path, ui: &Ui) -> Result<()> {
 }
 
 pub(crate) fn run(
-    context: &Context,
+    project: &Project,
     ui: &Ui,
-    selection: &Selection,
     action: Action<'_>,
-    options: &ProbeArgs,
+    arguments: &ProbeArgs,
+    profile: Option<&Profile>,
+    options: Options<'_>,
 ) -> Result<()> {
-    let name = action.name();
-    let with_progress = match action {
-        Action::Run { .. } | Action::Flash | Action::Attach { .. } => true,
-        Action::Reset => false,
-    };
-    let command = command(&context.root, selection, action, options)?;
-    // Keep the parent waiting while the child handles the terminal's Ctrl-C and cleans up.
-    // https://docs.rs/ctrlc/latest/ctrlc/fn.set_handler.html
-    ctrlc::set_handler(|| {})?;
-    let result = if with_progress {
-        let label = ui.label(name, &[&selection.id], ui::Target::None);
-        run_command_with_progress(ui, &mut Progress::new(ui, 1), &label, command)
+    let choice = choice(arguments.firmware.as_deref(), arguments.select);
+    let artifact;
+    let (firmware, image) = if matches!(action, Action::Reset) {
+        (project.resolve_firmware(choice, options)?, None)
     } else {
+        artifact = project.artifact(choice, profile, options)?;
+        let firmware = project
+            .firmware(&artifact.firmware)
+            .expect("resolved artifact belongs to registered firmware");
+        (
+            firmware,
+            Some(Image {
+                firmware: &artifact.firmware,
+                path: &artifact.path,
+                profile: artifact.profile.as_ref(),
+            }),
+        )
+    };
+    let command = command(project.root(), firmware.chip, image, action, arguments)?;
+    // Keep the parent waiting while the child handles the terminal's Ctrl-C and cleans up.
+    ctrlc::set_handler(|| {})?;
+    let result = if matches!(action, Action::Reset) {
         run_command(ui, command)
+    } else {
+        let label = ui.label(action.name(), &[firmware.id], None);
+        ui.start_progress(1, 1, &label);
+        let started = Instant::now();
+        let result = run_command(ui, command);
+        ui.finish_progress(started.elapsed(), result.is_ok());
+        result
     };
     with_installation_hint(result)
 }
 
+#[derive(Clone, Copy)]
+struct Image<'a> {
+    firmware: &'a str,
+    path: &'a Path,
+    profile: Option<&'a Profile>,
+}
+
+fn run_command(ui: &Ui, mut command: Command) -> io::Result<()> {
+    let rendered = std::iter::once(command.get_program())
+        .chain(command.get_args())
+        .map(|argument| argument.to_string_lossy())
+        .collect::<Vec<_>>()
+        .join(" ");
+    ui.command(&rendered);
+    let status = command.status()?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(io::Error::other(format!("{rendered} failed with {status}")))
+    }
+}
+
 fn command(
     root: &Path,
-    selection: &Selection,
+    chip: &str,
+    image: Option<Image<'_>>,
     action: Action<'_>,
     options: &ProbeArgs,
 ) -> Result<Command> {
@@ -69,7 +111,7 @@ fn command(
         .current_dir(root)
         .arg(action.name())
         .arg("--chip")
-        .arg(&selection.platform.chip);
+        .arg(chip);
     if let Some(probe) = &options.probe {
         command.arg("--probe").arg(probe);
     }
@@ -81,16 +123,16 @@ fn command(
     }
     match action {
         Action::Run { monitor } => {
-            command.arg(existing_elf(selection)?).arg("--verify");
+            command.arg(existing_elf(image)?).arg("--verify");
             add_monitor(&mut command, monitor);
         }
         Action::Flash => {
             command
-                .arg(existing_elf(selection)?)
+                .arg(existing_elf(image)?)
                 .args(["--verify", "--reset"]);
         }
         Action::Attach { monitor } => {
-            command.arg(existing_elf(selection)?);
+            command.arg(existing_elf(image)?);
             add_monitor(&mut command, monitor);
         }
         Action::Reset => {}
@@ -98,22 +140,21 @@ fn command(
     Ok(command)
 }
 
-fn existing_elf(selection: &Selection) -> Result<PathBuf> {
-    let path = runner::firmware_elf_path(selection);
-    if !path.is_file() {
-        let profile = selection
+fn existing_elf(image: Option<Image<'_>>) -> Result<&Path> {
+    let image = image.ok_or("hardware action requires an ELF path")?;
+    if !image.path.is_file() {
+        let profile = image
             .profile
-            .as_ref()
             .map(|profile| format!(" --profile {}", profile.name()))
             .unwrap_or_default();
         return Err(format!(
             "ELF not found: {}; build it with polyfw build {}{profile}",
-            path.display(),
-            selection.id
+            image.path.display(),
+            image.firmware,
         )
         .into());
     }
-    Ok(path)
+    Ok(image.path)
 }
 
 fn with_installation_hint(result: io::Result<()>) -> Result<()> {
@@ -146,12 +187,12 @@ fn add_monitor(command: &mut Command, options: &MonitorArgs) {
 mod tests {
     use std::ffi::OsStr;
     use std::fs;
+    use std::path::PathBuf;
 
     use clap::ColorChoice;
 
     use super::*;
-    use crate::cli::RttChannelMode;
-    use crate::model::{Firmware, Platform};
+    use crate::args::RttChannelMode;
 
     #[test]
     fn only_a_missing_probe_command_reports_the_installation_link() {
@@ -186,7 +227,7 @@ mod tests {
         let mut fixture = Fixture::new("existing");
         let monitor = MonitorArgs::default();
         for name in [None, Some("dev"), Some("release"), Some("bench-debug")] {
-            fixture.selection.profile = name.map(|name| name.parse().unwrap());
+            fixture.profile = name.map(|name| name.parse().unwrap());
             let elf = fixture.write_elf();
             for flash in [false, true] {
                 let action = if flash {
@@ -220,7 +261,7 @@ mod tests {
     #[test]
     fn attach_selects_the_profile_and_connection_and_monitor_options() {
         let mut fixture = Fixture::new("attach");
-        fixture.selection.profile = Some("release".parse().unwrap());
+        fixture.profile = Some("release".parse().unwrap());
         let elf = fixture.write_elf();
         let monitor = MonitorArgs {
             rtt_channel_mode: RttChannelMode::NoBlockTrim,
@@ -270,7 +311,7 @@ mod tests {
             (Some("release"), "release", " --profile release"),
             (Some("bench-debug"), "bench-debug", " --profile bench-debug"),
         ] {
-            fixture.selection.profile = name.map(|name| name.parse().unwrap());
+            fixture.profile = name.map(|name| name.parse().unwrap());
             for action in [
                 Action::Run { monitor: &monitor },
                 Action::Flash,
@@ -317,7 +358,7 @@ mod tests {
 
     struct Fixture {
         root: PathBuf,
-        selection: Selection,
+        profile: Option<Profile>,
     }
 
     impl Fixture {
@@ -330,39 +371,41 @@ mod tests {
             fs::create_dir_all(&root).unwrap();
             let root = root.canonicalize().unwrap();
             Self {
-                root: root.clone(),
-                selection: Selection {
-                    id: "test-firmware".into(),
-                    profile: None,
-                    firmware: Firmware {
-                        description: Some("fixture".into()),
-                        platform: "test-platform".into(),
-                        package: "test-firmware".into(),
-                        bin: Some("robot-image".into()),
-                        resolved_bin: "robot-image".into(),
-                        cargo: crate::model::CargoContext::fixture(&root, "test-platform"),
-                        ..Firmware::default()
-                    },
-                    platform: Platform {
-                        working_dir: Some("platform/test".into()),
-                        target: "thumbv7em-none-eabihf".into(),
-                        cpu: "cortex-m4".into(),
-                        chip: "test-chip".into(),
-                        ..Platform::default()
-                    },
-                },
+                root,
+                profile: None,
             }
         }
 
+        fn elf_path(&self) -> PathBuf {
+            let directory = match self.profile.as_ref().map(Profile::name) {
+                None | Some("dev") => "debug",
+                Some(name) => name,
+            };
+            self.root
+                .join("target/firmware/test-platform/thumbv7em-none-eabihf")
+                .join(directory)
+                .join("robot-image")
+        }
+
         fn write_elf(&self) -> PathBuf {
-            let path = runner::firmware_elf_path(&self.selection);
+            let path = self.elf_path();
             fs::create_dir_all(path.parent().unwrap()).unwrap();
             fs::write(&path, "existing ELF").unwrap();
             path
         }
 
         fn command(&self, action: Action<'_>, options: &ProbeArgs) -> Result<Command> {
-            command(&self.root, &self.selection, action, options)
+            let path = self.elf_path();
+            let image = if matches!(action, Action::Reset) {
+                None
+            } else {
+                Some(Image {
+                    firmware: "test-firmware",
+                    path: &path,
+                    profile: self.profile.as_ref(),
+                })
+            };
+            command(&self.root, "test-chip", image, action, options)
         }
     }
 

@@ -17,6 +17,7 @@ check:
     cargo fmt --check
     cargo clippy --locked --all-targets -- -D warnings
     cargo test --locked
+    cargo test --locked --no-default-features --test library
 
 # Run example integration tests; pass test-name filters and test-runner options directly.
 [positional-arguments]

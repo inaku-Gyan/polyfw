@@ -2,7 +2,7 @@ use std::path::Path;
 
 use semver::Version;
 
-use crate::Result;
+use crate::{BoxError, InternalResult as Result};
 
 pub(crate) const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Raise only when the current implementation can no longer preserve older contracts.
@@ -13,7 +13,7 @@ pub(crate) const MIN_REQUIRED_CLI_VERSION: &str = "0.2.0";
 pub(crate) fn preflight(source: &str, path: &Path) -> Result<()> {
     let document: toml::Table = toml::from_str(source)
         .map_err(|error| format!("invalid registry {}: {error}", path.display()))?;
-    let declaration_error = |reason: String| -> Box<dyn std::error::Error> {
+    let declaration_error = |reason: String| -> BoxError {
         format!(
                 "{}: {reason}; this CLI is {CLI_VERSION}. Review the configuration contract before \
                  adding config-version and min-polyfw-version; the current authoring baseline \

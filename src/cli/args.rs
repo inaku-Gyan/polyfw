@@ -6,8 +6,8 @@ use clap::{
     Args, ColorChoice, Command, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum,
 };
 
-use crate::profile::Profile;
 use crate::ui::color_enabled;
+use polyfw::Profile;
 
 /// Build, check, flash and monitor embedded Rust firmware registered in polyfw.toml.
 ///
@@ -476,6 +476,7 @@ pub(crate) enum Task {
     Verify(FirmwareArgs),
 }
 
+#[cfg(test)]
 impl Task {
     pub(crate) fn profile_override(&self) -> Option<Profile> {
         match self {

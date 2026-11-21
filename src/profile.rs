@@ -2,12 +2,16 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
+use crate::{Error, ErrorKind};
+
+/// A validated Cargo profile name, such as `dev`, `release` or a custom profile.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(try_from = "String")]
-pub(crate) struct Profile(String);
+pub struct Profile(String);
 
 impl Profile {
-    pub(crate) fn name(&self) -> &str {
+    /// Returns the name passed to Cargo.
+    pub fn name(&self) -> &str {
         &self.0
     }
 
@@ -23,7 +27,7 @@ impl Profile {
 }
 
 impl FromStr for Profile {
-    type Err = String;
+    type Err = Error;
 
     fn from_str(name: &str) -> Result<Self, Self::Err> {
         name.to_owned().try_into()
@@ -31,7 +35,7 @@ impl FromStr for Profile {
 }
 
 impl TryFrom<String> for Profile {
-    type Error = String;
+    type Error = Error;
 
     fn try_from(name: String) -> Result<Self, Self::Error> {
         if name.is_empty()
@@ -39,7 +43,10 @@ impl TryFrom<String> for Profile {
                 .bytes()
                 .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
         {
-            return Err("profile names must contain only letters, digits, '_' or '-'".into());
+            return Err(Error::new(
+                ErrorKind::InvalidProfile,
+                "profile names must contain only letters, digits, '_' or '-'",
+            ));
         }
         Ok(Self(name))
     }

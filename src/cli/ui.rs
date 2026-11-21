@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::io::{self, IsTerminal};
 use std::path::Path;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use clap::ColorChoice;
 use comfy_table::{CellAlignment, ContentArrangement, Table, presets};
@@ -9,20 +9,13 @@ use dialoguer::FuzzySelect;
 use dialoguer::console::{self, Term, style, truncate_str};
 use dialoguer::theme::ColorfulTheme;
 
-use crate::Result;
-use crate::info::{Firmware, Report};
-use crate::model::Registry;
-use crate::profile::Profile;
+use polyfw::{
+    FirmwareInfo, PickRequest, Profile, ProgressEvent, ProjectInfo, StageKind, StageTarget,
+};
 
 pub(crate) struct Ui {
     unicode: bool,
     width: usize,
-}
-
-pub enum Target {
-    Host,
-    Embedded,
-    None,
 }
 
 pub(crate) fn color_enabled(color: ColorChoice) -> bool {
@@ -88,7 +81,7 @@ impl Ui {
         }
     }
 
-    pub(crate) fn cleaning_directories(&self, platform: &str, firmwares: &[&str]) {
+    pub(crate) fn cleaning_directories(&self, platform: &str, firmwares: &[String]) {
         println!(
             "{} {} (firmwares: {})",
             style("cleaning Cargo directories").cyan().bold(),
@@ -97,7 +90,7 @@ impl Ui {
         );
     }
 
-    pub(crate) fn cleaning_package(&self, package: &str, platform: &str, firmwares: &[&str]) {
+    pub(crate) fn cleaning_package(&self, package: &str, platform: &str, firmwares: &[String]) {
         println!(
             "{} {} (target-dir: {}; firmwares: {})",
             style("cleaning package").cyan().bold(),
@@ -107,16 +100,21 @@ impl Ui {
         );
     }
 
-    pub(crate) fn label(&self, action: &str, packages: &[&str], target: Target) -> String {
+    pub(crate) fn label(
+        &self,
+        action: &str,
+        packages: &[&str],
+        target: Option<StageTarget>,
+    ) -> String {
         let target = match target {
-            Target::Host => "(host)",
-            Target::Embedded => "(emb)",
-            Target::None => "",
+            Some(StageTarget::Host) => "(host)",
+            Some(StageTarget::Embedded) => "(emb)",
+            None => "",
         };
         format!("{} {}: {}", action, target, packages.join(", "))
     }
 
-    pub(crate) fn print_info(&self, report: &Report, show_saved_selection: bool) {
+    pub(crate) fn print_info(&self, report: &ProjectInfo, show_saved_selection: bool) {
         if let Some(saved) = report
             .saved_selection
             .as_ref()
@@ -163,12 +161,12 @@ impl Ui {
             "platform".to_owned(),
         ];
         if let Some(firmware) = report.firmwares.values().next() {
-            headers.extend(
-                firmware
-                    .artifacts
-                    .iter()
-                    .map(|artifact| format!("{} ELF", artifact.profile.name())),
-            );
+            headers.extend(firmware.artifacts.iter().map(|artifact| {
+                format!(
+                    "{} ELF",
+                    artifact.profile.as_ref().map_or("dev", Profile::name)
+                )
+            }));
         }
         headers.push("description".to_owned());
         let firmware_rows = report
@@ -218,7 +216,7 @@ impl Ui {
         );
     }
 
-    fn print_firmware_info(&self, report: &Report, id: &str, firmware: &Firmware) {
+    fn print_firmware_info(&self, report: &ProjectInfo, id: &str, firmware: &FirmwareInfo) {
         let platform = &report.platforms[&firmware.platform];
         self.section("firmware", None, false);
         let mut fields = vec![("name", id.to_owned())];
@@ -260,7 +258,11 @@ impl Ui {
             .iter()
             .map(|artifact| {
                 vec![
-                    artifact.profile.name().to_owned(),
+                    artifact
+                        .profile
+                        .as_ref()
+                        .map_or("dev", Profile::name)
+                        .to_owned(),
                     artifact_status(artifact.exists),
                     artifact.path.display().to_string(),
                 ]
@@ -286,23 +288,24 @@ impl Ui {
 
     pub(crate) fn prompt_firmware(
         &self,
-        registry: &Registry,
-        saved: Option<&str>,
+        request: PickRequest<'_>,
         no_terminal_hint: &str,
-    ) -> Result<String> {
+    ) -> io::Result<Option<String>> {
         if !Term::stderr().is_term() {
-            return Err(format!("no firmware selected; {no_terminal_hint}").into());
+            return Err(io::Error::other(format!(
+                "no firmware selected; {no_terminal_hint}"
+            )));
         }
-        let firmware_width = registry
+        let firmware_width = request
             .firmwares
-            .keys()
-            .map(|name| name.chars().count())
+            .iter()
+            .map(|firmware| firmware.id.chars().count())
             .max()
             .unwrap_or(5)
             .min(24);
-        let platform_width = registry
+        let platform_width = request
             .firmwares
-            .values()
+            .iter()
             .map(|firmware| firmware.platform.chars().count())
             .max()
             .unwrap_or(3)
@@ -311,18 +314,18 @@ impl Ui {
             .width
             .saturating_sub(firmware_width + platform_width + 8) // 8 is the width of the marker
             .min(30);
-        let names: Vec<String> = registry
+        let names: Vec<String> = request
             .firmwares
             .iter()
-            .map(|(id, firmware)| {
-                let marker = if saved == Some(id.as_str()) {
+            .map(|firmware| {
+                let id = firmware.id;
+                let marker = if request.default == Some(id) {
                     " [saved]"
                 } else {
                     ""
                 };
                 let description = firmware
                     .description
-                    .as_deref()
                     .map(|description| {
                         format!(
                             "  {:<description_width$}",
@@ -340,12 +343,13 @@ impl Ui {
                 )
             })
             .collect();
-        let initial = saved
+        let initial = request
+            .default
             .and_then(|id| {
-                registry
+                request
                     .firmwares
-                    .keys()
-                    .position(|candidate| candidate == id)
+                    .iter()
+                    .position(|candidate| candidate.id == id)
             })
             .unwrap_or(0);
         let theme = ColorfulTheme {
@@ -359,23 +363,87 @@ impl Ui {
             "{}",
             style("type to filter; arrows to move; Enter to choose; Esc to cancel").dim()
         );
-        let Some(index) = FuzzySelect::with_theme(&theme)
+
+        let index = FuzzySelect::with_theme(&theme)
             .with_prompt("firmware")
             .items(&names)
             .default(initial)
             .max_length(14)
             .highlight_matches(true)
             .report(false)
-            .interact_opt()?
-        else {
-            return Err("selection cancelled".into());
+            .interact_opt()
+            .map_err(io::Error::other)?;
+        Ok(index.map(|index| request.firmwares[index].id.to_owned()))
+    }
+
+    pub(crate) fn progress_event(&self, event: ProgressEvent<'_>) {
+        match event {
+            ProgressEvent::Cleaning(scope) => {
+                let directory = scope.target_dir.display().to_string();
+                if let Some(package) = &scope.package {
+                    self.cleaning_package(package, &directory, &scope.firmwares);
+                } else {
+                    self.cleaning_directories(&directory, &scope.firmwares);
+                }
+            }
+            ProgressEvent::Started(stage) => {
+                let action = match stage.kind {
+                    StageKind::Build => "build",
+                    StageKind::Clean => "clean",
+                    StageKind::Format => "format",
+                    StageKind::FormatCheck => "format check",
+                    StageKind::Lint => "lint",
+                    StageKind::Test => "test",
+                    _ => "cargo",
+                };
+                let profiled;
+                let mut subjects = stage
+                    .subjects
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>();
+                if let (Some(profile), Some(subject)) = (stage.profile, subjects.first_mut()) {
+                    profiled = format!("{} ({})", subject, profile.name());
+                    *subject = &profiled;
+                }
+                self.start_progress(
+                    stage.index,
+                    stage.total,
+                    &self.label(action, &subjects, stage.target),
+                );
+                self.command(stage.command);
+            }
+            ProgressEvent::Finished {
+                elapsed, success, ..
+            } => self.finish_progress(elapsed, success),
+            _ => {}
+        }
+    }
+
+    pub(crate) fn start_progress(&self, index: usize, total: usize, label: &str) {
+        let arrow = if self.unicode { "▶" } else { ">" };
+        eprintln!(
+            "{} {} {}",
+            style(format!("[{index}/{total}]")).cyan().bold(),
+            style(arrow).cyan().bold(),
+            style(label).bold()
+        );
+    }
+
+    pub(crate) fn finish_progress(&self, elapsed: Duration, success: bool) {
+        let (marker, word) = if success {
+            let marker = if self.unicode { "✓" } else { "[ok]" };
+            (style(marker).green().bold(), "done")
+        } else {
+            let marker = if self.unicode { "✗" } else { "[fail]" };
+            (style(marker).red().bold(), "failed")
         };
-        registry
-            .firmwares
-            .keys()
-            .nth(index)
-            .cloned()
-            .ok_or_else(|| "selection index out of range".into())
+        eprintln!(
+            "  {} {} ({})",
+            marker,
+            style(word).bold(),
+            style(format_duration(elapsed)).dim()
+        );
     }
 
     fn section(&self, title: &str, count: Option<usize>, blank_before: bool) {
@@ -396,77 +464,6 @@ impl Ui {
     fn print_table(&self, headers: &[&str], rows: &[Vec<String>]) {
         for line in render_table(headers, rows, self.width).lines() {
             println!("  {line}");
-        }
-    }
-}
-
-pub(crate) struct Progress<'a> {
-    ui: &'a Ui,
-    total: usize,
-    current: usize,
-}
-
-pub(crate) struct Step {
-    index: usize,
-    total: usize,
-    started: Instant,
-}
-
-impl<'a> Progress<'a> {
-    pub(crate) fn new(ui: &'a Ui, total: usize) -> Self {
-        Self {
-            ui,
-            total,
-            current: 0,
-        }
-    }
-
-    pub(crate) fn start(&mut self, label: &str) -> Step {
-        self.current += 1;
-        let step = Step {
-            index: self.current,
-            total: self.total,
-            started: Instant::now(),
-        };
-        let arrow = if self.ui.unicode { "▶" } else { ">" };
-        eprintln!(
-            "{} {} {}",
-            style(format!("[{}/{}]", step.index, step.total))
-                .cyan()
-                .bold(),
-            style(arrow).cyan().bold(),
-            style(label).bold()
-        );
-        step
-    }
-
-    pub(crate) fn finish(&self, step: Step, success: bool) {
-        let (marker, word) = if success {
-            (self.success_marker(), "done")
-        } else {
-            (self.failure_marker(), "failed")
-        };
-        eprintln!(
-            "  {} {} ({})",
-            marker,
-            style(word).bold(),
-            style(format_duration(step.started.elapsed())).dim()
-        );
-    }
-
-    fn success_marker(&self) -> String {
-        if self.ui.unicode {
-            style("✓").green().bold().to_string()
-        } else {
-            style("[ok]").green().bold().to_string()
-        }
-    }
-
-    fn failure_marker(&self) -> String {
-        if self.ui.unicode {
-            style("✗").red().bold().to_string()
-        } else {
-            style("[fail]").red().bold().to_string()
         }
     }
 }

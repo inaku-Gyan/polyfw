@@ -1,3 +1,4 @@
+#![cfg(feature = "cli")]
 #![forbid(unsafe_code)]
 
 use std::fs;
@@ -10,6 +11,40 @@ struct Project {
     root: PathBuf,
     project: PathBuf,
     workspace: PathBuf,
+}
+
+#[test]
+fn info_requires_a_terminal_to_pick_even_when_a_firmware_is_saved() {
+    let fixture = Project::new("info-picker");
+    let state = fixture.project.join(".polyfw-state/selected");
+    let launch = fixture.project.join(".vscode/launch.json");
+    for saved in [false, true] {
+        if saved {
+            succeed(
+                fixture
+                    .command(&["select", "led-demo", "--release"])
+                    .output()
+                    .unwrap(),
+            );
+        }
+        let expected_state = fs::read(&state).ok();
+        let expected_launch = fs::read(&launch).ok();
+        for json in [false, true] {
+            let mut args = vec!["info", "--firmware"];
+            if json {
+                args.push("--json");
+            }
+            let output = fixture.command(&args).output().unwrap();
+            assert!(!output.status.success());
+            assert!(output.stdout.is_empty());
+            assert!(
+                String::from_utf8_lossy(&output.stderr)
+                    .contains("polyfw info --firmware <FIRMWARE>")
+            );
+            assert_eq!(fs::read(&state).ok(), expected_state);
+            assert_eq!(fs::read(&launch).ok(), expected_launch);
+        }
+    }
 }
 
 impl Project {

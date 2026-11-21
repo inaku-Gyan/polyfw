@@ -16,7 +16,7 @@ just check
 ```
 
 `just check` checks Rust formatting, runs Clippy for all targets with warnings denied, and runs
-the Rust tests.
+the Rust tests. It also runs the library consumer test with default features disabled.
 
 Use `just --list` for repository recipes. `just fix` formats source and applies Clippy fixes;
 review those changes before committing. The Rust minimum in `Cargo.toml` is the supported compiler
@@ -53,16 +53,14 @@ use the consuming workspaces' pins rather than inheriting the compiler used to r
 
 | Files | Responsibility |
 | --- | --- |
-| `src/main.rs`, `src/cli.rs` | Project-free dispatch, loading boundaries and CLI arguments/help |
-| `src/model.rs`, `src/registry.rs` | Configuration/schema model, root discovery, validation and saved state |
-| `src/config_version.rs` | Version preflight, SemVer precedence and release-maintained compatibility baselines |
-| `src/init.rs`, `assets/polyfw.toml` | Configuration template and exclusive creation without project loading |
-| `src/cargo_config.rs` | Optional effective Cargo target/CPU consistency checking |
-| `src/local_dependencies.rs`, `src/scope.rs` | Canonical directory matching and host/MCU package scopes |
-| `src/commands.rs` | Firmware/profile resolution and ordered Cargo stages |
-| `src/runner.rs`, `src/profile.rs` | Process construction, execution contexts and shared artifact paths |
-| `src/probe.rs`, `src/vscode.rs` | Hardware subprocesses and generated debugger settings |
-| `src/info.rs`, `src/ui.rs` | Read-only reports and terminal output |
+| `src/lib.rs` | Public Rust types and entry points |
+| `src/cli/` | Arguments, dispatch, terminal output, JSON encoding and hardware subprocesses |
+| `src/config/` | Configuration model, Schema, version preflight and dependency path patterns |
+| `src/project/` | Project discovery, queries, workflows, selection state and editor files |
+| `src/project/init.rs`, `assets/polyfw.toml` | Configuration template and exclusive initialization |
+| `src/cargo/` | Cargo context and metadata, consistency checks, dependency scopes, stage planning and ELF paths |
+| `src/process.rs` | Stage execution, progress and child output |
+| `tests/library.rs` | Public Rust API exercised as a downstream caller |
 | `tests/project_root.rs`, `tests/standalone.rs` | Executable-level project isolation and external-tool boundaries |
 | `examples/`, `tests/examples.rs` | Minimal Cortex-M consumers reused by executable-level integration tests |
 | `.github/workflows/release.yml` | Tag validation, native binary archives and publication |
@@ -80,8 +78,9 @@ Each description has one source:
 
 | Surface | Source to edit | Follow-up |
 | --- | --- | --- |
-| CLI help | Documentation comments and help strings in `src/cli.rs` | Inspect `just run help COMMAND` |
-| Configuration Schema | Model comments and schema annotations in `src/model.rs` | Run `just schema` and commit `assets/polyfw.schema.json` |
+| CLI help | Documentation comments and help strings in `src/cli/args.rs` | Inspect `just run help COMMAND` |
+| Configuration Schema | Model comments and schema annotations in `src/config/model.rs` | Run `just schema` and commit `assets/polyfw.schema.json` |
+| Rust API | Rustdoc on the public items exported by `src/lib.rs` | Run `cargo doc --locked --no-deps --no-default-features` |
 | Installation and navigation | `README.md` | Keep relative guide links usable in source, crate and binary archives |
 | Configuration rules | `docs/configuration.md` | Match model defaults, Cargo requirements and validation |
 | User operations and JSON output | `docs/usage.md` | Match CLI parsing, command behavior and serialization |

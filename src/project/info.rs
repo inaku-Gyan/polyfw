@@ -1,61 +1,103 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use serde::Serialize;
+use crate::cargo::{model::Selection, runner::firmware_elf_path, scope};
+use crate::config::model::Registry;
+use crate::{Error, ErrorKind, Profile, Result};
 
-use crate::Result;
-use crate::model::SavedSelection;
-use crate::profile::Profile;
-use crate::registry::Context;
-use crate::runner::firmware_elf_path;
-use crate::scope::{self, PackageScope};
+use super::{context::Context, selection::SavedSelection};
 
-#[derive(Serialize)]
-pub(crate) struct Report {
-    pub(crate) repository_root: PathBuf,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) saved_selection: Option<SavedSelection>,
-    pub(crate) platforms: BTreeMap<String, Platform>,
-    pub(crate) firmwares: BTreeMap<String, Firmware>,
+/// A read-only report on the resolved firmware and any saved selection.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct ProjectInfo {
+    pub root: PathBuf,
+    pub saved_selection: Option<SavedSelection>,
+    pub platforms: BTreeMap<String, PlatformInfo>,
+    pub firmwares: BTreeMap<String, FirmwareInfo>,
 }
 
-#[derive(Serialize)]
-pub(crate) struct Platform {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) description: Option<String>,
-    pub(crate) registered_firmwares: usize,
-    pub(crate) target: String,
-    pub(crate) cpu: String,
-    pub(crate) chip: String,
+/// Platform declarations and the number of firmware entries that refer to them.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct PlatformInfo {
+    pub description: Option<String>,
+    pub registered_firmwares: usize,
+    pub target: String,
+    pub cpu: String,
+    pub chip: String,
 }
 
-#[derive(Serialize)]
-pub(crate) struct Firmware {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) description: Option<String>,
-    pub(crate) platform: String,
-    pub(crate) package: String,
-    pub(crate) bin: String,
-    pub(crate) workspace: PathBuf,
-    pub(crate) working_dir: PathBuf,
-    pub(crate) target_dir: PathBuf,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) build_dir: Option<PathBuf>,
-    pub(crate) target: String,
-    pub(crate) check_platform: bool,
-    pub(crate) artifacts: Vec<Artifact>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) local_dependencies: Option<Vec<PackageScope>>,
+impl PlatformInfo {
+    pub(crate) fn load(registry: &Registry, id: &str) -> Self {
+        let platform = &registry.platforms[id];
+        Self {
+            description: platform.description.clone(),
+            registered_firmwares: registry
+                .firmwares
+                .values()
+                .filter(|firmware| firmware.platform == id)
+                .count(),
+            target: platform.target.clone(),
+            cpu: platform.cpu.clone(),
+            chip: platform.chip.clone(),
+        }
+    }
 }
 
-#[derive(Serialize)]
-pub(crate) struct Artifact {
-    pub(crate) profile: Profile,
-    pub(crate) path: PathBuf,
-    pub(crate) exists: bool,
+/// Resolved Cargo information and known artifact locations for one firmware.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct FirmwareInfo {
+    pub description: Option<String>,
+    pub platform: String,
+    pub package: String,
+    pub bin: String,
+    pub workspace: PathBuf,
+    pub working_dir: PathBuf,
+    pub target_dir: PathBuf,
+    pub build_dir: Option<PathBuf>,
+    pub target: String,
+    pub check_platform: bool,
+    pub artifacts: Vec<Artifact>,
+    /// Present in the detailed firmware report.
+    pub local_dependencies: Option<Vec<DependencyInfo>>,
 }
 
-impl Report {
+/// A local package included in a detailed firmware report.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct DependencyInfo {
+    pub name: String,
+    pub manifest_path: PathBuf,
+    /// Whether this dependency participates in the target-side check scope.
+    pub embedded: bool,
+}
+
+/// Expected ELF location and a snapshot of whether a file is present there.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct Artifact {
+    pub firmware: String,
+    /// The explicit or inherited profile. Omission uses Cargo's build default.
+    pub profile: Option<Profile>,
+    pub path: PathBuf,
+    pub exists: bool,
+}
+
+impl Artifact {
+    pub(crate) fn from_selection(selection: &Selection) -> Self {
+        let path = firmware_elf_path(selection);
+        Self {
+            firmware: selection.id.clone(),
+            profile: selection.profile.clone(),
+            exists: path.is_file(),
+            path,
+        }
+    }
+}
+
+impl ProjectInfo {
     pub(crate) fn load(context: &Context, firmware: Option<&str>) -> Result<Self> {
         let saved_selection = context.read_saved_selection()?;
         let selections = match firmware {
@@ -76,39 +118,34 @@ impl Report {
             profiles.push(profile.clone());
         }
 
-        let platforms = selections
-            .iter()
-            .map(|selection| {
-                let platform = &selection.platform;
-                (
-                    selection.firmware.platform.clone(),
-                    Platform {
-                        description: platform.description.clone(),
-                        registered_firmwares: context
-                            .registry
-                            .firmwares
-                            .values()
-                            .filter(|firmware| firmware.platform == selection.firmware.platform)
-                            .count(),
-                        target: platform.target.clone(),
-                        cpu: platform.cpu.clone(),
-                        chip: platform.chip.clone(),
-                    },
-                )
-            })
-            .collect();
+        let mut platforms = BTreeMap::new();
         let mut firmwares = BTreeMap::new();
         for mut selection in selections {
+            platforms
+                .entry(selection.firmware.platform.clone())
+                .or_insert_with(|| {
+                    PlatformInfo::load(&context.registry, &selection.firmware.platform)
+                });
             let local_dependencies = if firmware.is_some() {
-                let scope = scope::resolve(context, std::slice::from_ref(&selection))?
-                    .into_iter()
-                    .next()
-                    .expect("one firmware has one PLATFORM scope");
+                let scope = scope::resolve(
+                    &context.root,
+                    &context.registry.config.local_dependencies,
+                    std::slice::from_ref(&selection),
+                )
+                .map_err(|error| Error::new(ErrorKind::Cargo, error))?
+                .into_iter()
+                .next()
+                .expect("one firmware has one platform scope");
                 Some(
                     scope
                         .packages
                         .into_iter()
                         .filter(|package| !scope.firmware.contains(&package.manifest_path))
+                        .map(|package| DependencyInfo {
+                            name: package.name,
+                            manifest_path: package.manifest_path,
+                            embedded: package.embedded,
+                        })
                         .collect(),
                 )
             } else {
@@ -118,26 +155,21 @@ impl Report {
                 .iter()
                 .map(|profile| {
                     selection.profile = Some(profile.clone());
-                    let path = firmware_elf_path(&selection);
-                    Artifact {
-                        profile: profile.clone(),
-                        exists: path.is_file(),
-                        path,
-                    }
+                    Artifact::from_selection(&selection)
                 })
                 .collect();
             firmwares.insert(
                 selection.id,
-                Firmware {
+                FirmwareInfo {
                     description: selection.firmware.description,
                     platform: selection.firmware.platform,
                     package: selection.firmware.package,
-                    bin: selection.firmware.resolved_bin,
-                    workspace: selection.firmware.cargo.workspace,
-                    working_dir: selection.firmware.cargo.working_dir,
-                    target_dir: selection.firmware.cargo.target_dir,
-                    build_dir: selection.firmware.cargo.build_dir,
-                    target: selection.firmware.cargo.target,
+                    bin: selection.resolved_bin,
+                    workspace: selection.cargo.workspace,
+                    working_dir: selection.cargo.working_dir,
+                    target_dir: selection.cargo.target_dir,
+                    build_dir: selection.cargo.build_dir,
+                    target: selection.cargo.target,
                     check_platform: selection
                         .firmware
                         .check_platform
@@ -149,7 +181,7 @@ impl Report {
             );
         }
         Ok(Self {
-            repository_root: context.root.clone(),
+            root: context.root.clone(),
             saved_selection,
             platforms,
             firmwares,
@@ -174,7 +206,7 @@ mod tests {
         fs::create_dir_all(artifact_dir.join("release/robot-image")).unwrap();
         fs::remove_file(context.root.join("platform/test/host-helper/Cargo.toml")).unwrap();
 
-        let report = Report::load(&context, None).unwrap();
+        let report = ProjectInfo::load(&context, None).unwrap();
         assert_eq!(report.firmwares.len(), 2);
         assert_eq!(report.platforms["test"].registered_firmwares, 2);
         assert!(report.saved_selection.is_none());
@@ -190,16 +222,19 @@ mod tests {
             );
         }
         let artifacts = &report.firmwares["one"].artifacts;
-        assert_eq!(artifacts[0].profile.name(), "dev");
+        assert_eq!(artifacts[0].profile.as_ref().unwrap().name(), "dev");
         assert_eq!(artifacts[0].path, artifact_dir.join("debug/robot-image"));
         assert!(artifacts[0].exists);
-        assert_eq!(artifacts[1].profile.name(), "release");
+        assert_eq!(artifacts[1].profile.as_ref().unwrap().name(), "release");
         assert!(!artifacts[1].exists);
-        let json = serde_json::to_value(report).unwrap();
-        assert_eq!(json["firmwares"]["one"]["artifacts"][1]["exists"], false);
-        assert!(Report::load(&context, Some("one")).is_err());
+        assert!(ProjectInfo::load(&context, Some("one")).is_err());
         assert!(!context.selection_path().exists());
-        assert!(!context.root.join(crate::vscode::LAUNCH_FILE).exists());
+        assert!(
+            !context
+                .root
+                .join(super::super::vscode::LAUNCH_FILE)
+                .exists()
+        );
         fs::remove_dir_all(context.root).unwrap();
     }
 
@@ -210,10 +245,10 @@ mod tests {
             .save_selection("two", Some(&"bench-debug".parse().unwrap()))
             .unwrap();
         let state = fs::read(context.selection_path()).unwrap();
-        let launch_path = context.root.join(crate::vscode::LAUNCH_FILE);
+        let launch_path = context.root.join(super::super::vscode::LAUNCH_FILE);
         let launch = fs::read(&launch_path).unwrap();
 
-        let report = Report::load(&context, Some("one")).unwrap();
+        let report = ProjectInfo::load(&context, Some("one")).unwrap();
         assert_eq!(report.firmwares.len(), 1);
         assert_eq!(report.platforms.len(), 1);
         let firmware = &report.firmwares["one"];
@@ -233,7 +268,10 @@ mod tests {
             ]
         );
         assert_eq!(firmware.artifacts.len(), 3);
-        assert_eq!(firmware.artifacts[2].profile.name(), "bench-debug");
+        assert_eq!(
+            firmware.artifacts[2].profile.as_ref().unwrap().name(),
+            "bench-debug"
+        );
         assert_eq!(
             firmware.artifacts[2].path,
             context
@@ -247,42 +285,31 @@ mod tests {
         assert_eq!(fs::read(launch_path).unwrap(), launch);
         assert!(!context.root.join("target").exists());
 
-        let json = serde_json::to_value(report).unwrap();
-        assert_eq!(json["firmwares"]["one"]["bin"], "robot-image");
-        assert_eq!(json["platforms"]["test"]["target"], "thumbv7em-none-eabihf");
+        assert_eq!(firmware.bin, "robot-image");
+        assert_eq!(report.platforms["test"].target, "thumbv7em-none-eabihf");
         let manifest_path = |directory: &str| {
             PathBuf::from("platform")
                 .join("test")
                 .join(directory)
                 .join("Cargo.toml")
         };
+        let manifests = firmware
+            .local_dependencies
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(|package| package.manifest_path.clone())
+            .collect::<Vec<_>>();
         assert_eq!(
-            json["firmwares"]["one"]["local_dependencies"],
-            serde_json::json!([
-                {
-                    "package": "common",
-                    "manifest_path": manifest_path("common"),
-                    "target": "embedded"
-                },
-                {
-                    "package": "common-leaf",
-                    "manifest_path": manifest_path("leaf"),
-                    "target": "embedded"
-                },
-                {
-                    "package": "host-helper",
-                    "manifest_path": manifest_path("host-helper"),
-                    "target": "host"
-                },
-            ])
+            manifests,
+            [
+                manifest_path("common"),
+                manifest_path("leaf"),
+                manifest_path("host-helper")
+            ]
         );
-        assert!(json["firmwares"].get("two").is_none());
-        assert!(
-            json["firmwares"]["one"]
-                .get("workspace_dependencies")
-                .is_none()
-        );
-        let report = Report::load(&context, Some("two")).unwrap();
+        assert!(!report.firmwares.contains_key("two"));
+        let report = ProjectInfo::load(&context, Some("two")).unwrap();
         assert!(
             report.firmwares["two"]
                 .local_dependencies
@@ -290,16 +317,11 @@ mod tests {
                 .unwrap()
                 .is_empty()
         );
-        let json = serde_json::to_value(report).unwrap();
-        assert_eq!(
-            json["firmwares"]["two"]["local_dependencies"],
-            serde_json::json!([])
-        );
         fs::remove_dir_all(context.root).unwrap();
     }
 
     #[test]
-    fn descriptions_are_independent_and_json_preserves_only_supplied_values() {
+    fn descriptions_are_independent_and_keep_explicit_values() {
         let mut context = fixture("descriptions");
         for platform in [None, Some(""), Some(" \t"), Some("Demo board")] {
             for firmware in [None, Some(""), Some(" \t"), Some("Demo firmware")] {
@@ -315,43 +337,36 @@ mod tests {
                     .get_mut("one")
                     .unwrap()
                     .description = firmware.map(str::to_owned);
-                let report = Report::load(&context, None).unwrap();
-                let json = serde_json::to_value(report).unwrap();
-                assert_eq!(
-                    json["platforms"]["test"].get("description"),
-                    platform.map(serde_json::Value::from).as_ref()
-                );
-                assert_eq!(
-                    json["firmwares"]["one"].get("description"),
-                    firmware.map(serde_json::Value::from).as_ref()
-                );
+                let report = ProjectInfo::load(&context, None).unwrap();
+                assert_eq!(report.platforms["test"].description.as_deref(), platform);
+                assert_eq!(report.firmwares["one"].description.as_deref(), firmware);
             }
         }
         fs::remove_dir_all(context.root).unwrap();
     }
 
     #[test]
-    fn json_omits_absent_fields_and_preserves_explicit_profiles() {
+    fn reports_include_explicitly_saved_profiles() {
         let context = fixture("saved profiles");
-        let json = serde_json::to_value(Report::load(&context, None).unwrap()).unwrap();
-        assert!(json.get("saved_selection").is_none());
+        assert!(
+            ProjectInfo::load(&context, None)
+                .unwrap()
+                .saved_selection
+                .is_none()
+        );
         for profile in [None, Some("dev"), Some("release"), Some("bench-debug")] {
             context
                 .save_selection("one", profile.map(|name| name.parse().unwrap()).as_ref())
                 .unwrap();
-            let report = Report::load(&context, None).unwrap();
+            let report = ProjectInfo::load(&context, None).unwrap();
             let expected_count = if profile == Some("bench-debug") { 3 } else { 2 };
             for firmware in report.firmwares.values() {
                 assert_eq!(firmware.artifacts.len(), expected_count);
             }
-            let json = serde_json::to_value(report).unwrap();
-            assert_eq!(json["saved_selection"]["firmware"], "one");
-            let expected_profile = profile.map(serde_json::Value::from);
-            assert_eq!(
-                json["saved_selection"].get("profile"),
-                expected_profile.as_ref()
-            );
-            assert!(json["firmwares"]["one"].get("local_dependencies").is_none());
+            let saved = report.saved_selection.unwrap();
+            assert_eq!(saved.firmware, "one");
+            assert_eq!(saved.profile.as_ref().map(Profile::name), profile);
+            assert!(report.firmwares["one"].local_dependencies.is_none());
         }
         fs::remove_dir_all(context.root).unwrap();
     }
@@ -363,17 +378,17 @@ mod tests {
         fs::create_dir_all(context.selection_path().parent().unwrap()).unwrap();
         fs::write(context.selection_path(), saved).unwrap();
         for firmware in [None, Some("one")] {
-            let report = Report::load(&context, firmware).unwrap();
+            let report = ProjectInfo::load(&context, firmware).unwrap();
             assert!(report.firmwares.contains_key("one"));
             assert!(!report.firmwares.contains_key("removed-firmware"));
-            let json = serde_json::to_value(report).unwrap();
-            assert_eq!(json["saved_selection"]["firmware"], "removed-firmware");
-            assert_eq!(json["saved_selection"]["profile"], "release");
+            let selection = report.saved_selection.unwrap();
+            assert_eq!(selection.firmware, "removed-firmware");
+            assert_eq!(selection.profile.as_ref().unwrap().name(), "release");
             assert_eq!(fs::read_to_string(context.selection_path()).unwrap(), saved);
         }
-        let error = context.read_selection().unwrap_err().to_string();
-        assert!(error.contains("removed-firmware"), "{error}");
-        assert!(error.contains("polyfw select --clear"), "{error}");
+        let error = context.read_selection().unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::StaleSelection);
+        assert!(error.to_string().contains("removed-firmware"), "{error}");
         fs::remove_dir_all(context.root).unwrap();
     }
 
@@ -381,7 +396,7 @@ mod tests {
     fn an_info_query_reports_invalid_saved_state_and_unknown_firmwares() {
         let context = fixture("errors");
         assert!(
-            Report::load(&context, Some("unknown"))
+            ProjectInfo::load(&context, Some("unknown"))
                 .err()
                 .unwrap()
                 .to_string()
@@ -389,7 +404,7 @@ mod tests {
         );
         fs::create_dir_all(context.selection_path().parent().unwrap()).unwrap();
         fs::write(context.selection_path(), "invalid = [").unwrap();
-        let error = Report::load(&context, Some("one")).err().unwrap();
+        let error = ProjectInfo::load(&context, Some("one")).err().unwrap();
         assert!(error.to_string().contains("invalid saved selection"));
         assert_eq!(
             fs::read_to_string(context.selection_path()).unwrap(),
@@ -458,7 +473,7 @@ mod tests {
              package = \"other-fw\"\n",
         )
         .unwrap();
-        let output = crate::runner::workspace_cargo(&workspace)
+        let output = crate::cargo::runner::workspace_cargo(&workspace)
             .args(["generate-lockfile", "--offline"])
             .output()
             .unwrap();

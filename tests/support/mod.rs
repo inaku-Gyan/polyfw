@@ -3,8 +3,9 @@ use std::process::Command;
 
 mod cargo_env;
 
-use cargo_env::isolate_cargo_environment;
+pub(crate) use cargo_env::isolate_cargo_environment;
 
+#[cfg(feature = "cli")]
 pub fn polyfw() -> Command {
     isolate_cargo_environment(Command::new(env!("CARGO_BIN_EXE_polyfw")))
 }
