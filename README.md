@@ -120,10 +120,7 @@ Use the library with the CLI feature disabled in the dependency declaration.
 polyfw = { version = "0.3", default-features = false }
 ```
 
-Put this example in your host package's `src/main.rs` and run
-`cargo run -- /path/to/firmware-project`. The program opens the supplied root or searches from its
-working directory when no path is given. It uses the minimal demo's `hello` firmware ID. Use an ID
-from your project when adapting the example.
+Here is an example building a firmware named `hello` with `release` profile:
 
 ```rust
 use polyfw::{Check, Options, OutputMode, Profile, Project};
