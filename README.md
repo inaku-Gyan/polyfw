@@ -9,6 +9,7 @@
 - [Features](#features)
 - [Quick start](#quick-start)
 - [Install](#install)
+- [Use as a Rust dependency](#use-as-a-rust-dependency)
 - [Documentation](#documentation)
 
 ## Features
