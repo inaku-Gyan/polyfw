@@ -103,7 +103,7 @@ A successful save remains even if the following build or hardware action fails.
 ```sh
 polyfw info
 polyfw info --firmware led-demo
-polyfw info --firmware buzzer-demo --json > buzzer-demo.json
+polyfw info --firmware buzzer-demo --json=1 > buzzer-demo.json
 ```
 
 The overview lists all firmwares, their referenced platforms, the saved selection, and dev/release ELF
@@ -120,7 +120,18 @@ and omit detail rows and picker description segments. See
 in otherwise valid saved state is reported without blocking the query. Malformed state still
 fails. An ELF marked `present` may be older than the source or differ from the running image.
 
-The JSON view contains:
+### JSON format versions
+
+Pass `--json=1` or `--json 1` to select format version 1. `--json=latest`, `--json latest` and bare
+`--json` select the highest format version supported by the running binary. An unsupported version
+fails argument parsing before project discovery, and the error lists the supported values.
+
+Format versions are independent of polyfw releases. Each numbered version fixes the JSON fields,
+types, omission rules and meanings for both views. Contract changes, including new fields, use a
+new format version. New formats ship alongside existing numbered versions. The release notes
+announce any planned removals in advance. JSON object key order and whitespace may vary.
+
+Format version 1 contains these fields.
 
 | Field | Meaning |
 | --- | --- |
@@ -287,9 +298,11 @@ polyfw verify --all-firmwares
 polyfw build --all-firmwares --release
 ```
 
-Use `polyfw info --firmware led-demo --json` when a script needs resolved paths. Build and check
-output includes numbered stages, status and elapsed time; redirected output omits colors and
-Unicode marks. `--color always` and `--color never` override automatic color selection;
+Use `polyfw info --firmware led-demo --json=1` when a script needs resolved paths. See
+[JSON format versions](#json-format-versions) for the compatibility contract.
+
+Build and check output includes numbered stages, status and elapsed time. Redirected output omits
+colors and Unicode marks. `--color always` and `--color never` override automatic color selection.
 `NO_COLOR=1` disables automatic colors. Cargo may need network access to resolve dependencies.
 
 ## Troubleshoot

@@ -291,10 +291,15 @@ fn minimal_example_verify_reports_a_host_test_failure_after_formatting_and_linti
 #[test]
 fn multi_firmware_example_switches_and_checks_only_the_selected_scope() {
     let example = Example::new("multi-firmware");
-    let report = example.json(&["info", "--json"]);
+    let report = example.json(&["info", "--json=1"]);
+    assert_eq!(report, example.json(&["info", "--json"]));
     assert_eq!(report["firmwares"].as_object().unwrap().len(), 2);
     for id in ["led-demo", "buzzer-demo"] {
-        let details = example.json(&["info", "--firmware", id, "--json"]);
+        let details = example.json(&["info", "--firmware", id, "--json", "1"]);
+        assert_eq!(
+            details,
+            example.json(&["info", "--json=latest", "--firmware", id])
+        );
         let dependencies = details["firmwares"][id]["local_dependencies"]
             .as_array()
             .unwrap();

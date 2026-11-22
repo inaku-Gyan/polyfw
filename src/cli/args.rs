@@ -218,6 +218,13 @@ impl RttChannelMode {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub(crate) enum InfoJsonVersion {
+    #[value(name = "1")]
+    V1,
+    Latest,
+}
+
 #[derive(Debug, Subcommand)]
 pub(crate) enum Task {
     /// Create a polyfw.toml template and local Git ignore rules.
@@ -261,15 +268,19 @@ pub(crate) enum Task {
   polyfw info
   polyfw info --firmware
   polyfw info --firmware led-demo
-  polyfw info --firmware buzzer-demo --json"
+  polyfw info --json 1
+  polyfw info --firmware buzzer-demo --json=1"
     )]
     Info {
         /// Show one firmware's details; omit FIRMWARE to pick interactively without saving.
         #[arg(long, value_name = "FIRMWARE")]
         firmware: Option<Option<String>>,
-        /// Write the selected view as JSON to stdout; prompts use stderr.
-        #[arg(long)]
-        json: bool,
+        /// Write the selected view as JSON to stdout.
+        ///
+        /// Bare --json selects latest, the highest supported format version. Pin a numbered
+        /// version in scripts. Interactive prompts go to stderr.
+        #[arg(long, value_enum, value_name = "VERSION", num_args = 0..=1, default_missing_value = "latest")]
+        json: Option<InfoJsonVersion>,
     },
 
     /// Save a firmware and explicit profile, or clear the saved selection.
@@ -561,22 +572,31 @@ mod tests {
 
     #[test]
     fn info_distinguishes_an_overview_a_picker_and_a_named_firmware() {
+        use InfoJsonVersion::{Latest, V1};
+
         for command in ["info", "i"] {
             for (flags, expected_firmware, expected_json) in [
-                (vec![], None, false),
-                (vec!["--json"], None, true),
-                (vec!["--firmware"], None, false),
-                (vec!["--firmware", "--json"], None, true),
-                (vec!["--json", "--firmware"], None, true),
+                (vec![], None, None),
+                (vec!["--json"], None, Some(Latest)),
+                (vec!["--firmware"], None, None),
+                (vec!["--firmware", "--json"], None, Some(Latest)),
+                (vec!["--json", "--firmware"], None, Some(Latest)),
+                (vec!["--firmware", "--json=1"], None, Some(V1)),
+                (vec!["--json", "1", "--firmware"], None, Some(V1)),
                 (
                     vec!["--firmware", "sentry-chassis"],
                     Some("sentry-chassis"),
-                    false,
+                    None,
                 ),
                 (
-                    vec!["--firmware", "sentry-chassis", "--json"],
+                    vec!["--firmware", "sentry-chassis", "--json=latest"],
                     Some("sentry-chassis"),
-                    true,
+                    Some(Latest),
+                ),
+                (
+                    vec!["--json", "latest", "--firmware", "sentry-chassis"],
+                    Some("sentry-chassis"),
+                    Some(Latest),
                 ),
             ] {
                 let has_firmware_flag = flags.contains(&"--firmware");

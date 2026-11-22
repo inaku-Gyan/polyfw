@@ -5,7 +5,7 @@ use polyfw::ProjectInfo;
 use serde::Serialize;
 
 #[derive(Serialize)]
-struct Info<'a> {
+struct InfoV1<'a> {
     repository_root: &'a Path,
     #[serde(skip_serializing_if = "Option::is_none")]
     saved_selection: Option<Selection<'a>>,
@@ -63,8 +63,8 @@ struct Dependency<'a> {
     target: &'static str,
 }
 
-pub(crate) fn info(report: &ProjectInfo) -> serde_json::Result<String> {
-    serde_json::to_string_pretty(&Info {
+pub(crate) fn info_v1(report: &ProjectInfo) -> serde_json::Result<String> {
+    serde_json::to_string_pretty(&InfoV1 {
         repository_root: &report.root,
         saved_selection: report.saved_selection.as_ref().map(|saved| Selection {
             firmware: &saved.firmware,

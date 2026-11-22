@@ -8,7 +8,7 @@ use polyfw::{
 };
 
 use crate::Result;
-use crate::args::{FirmwareArgs, Task};
+use crate::args::{FirmwareArgs, InfoJsonVersion, Task};
 use crate::probe::{self, Action};
 use crate::ui::Ui;
 
@@ -75,10 +75,11 @@ fn run_project(project: &Project, task: Task, ui: &Ui) -> Result<ExitCode> {
                 Some(None) => InfoQuery::Pick,
             };
             let report = project.info(query, options)?;
-            if json {
-                println!("{}", crate::json::info(&report)?);
-            } else {
-                ui.print_info(&report, !matches!(query, InfoQuery::Pick));
+            match json {
+                Some(InfoJsonVersion::V1 | InfoJsonVersion::Latest) => {
+                    println!("{}", crate::json::info_v1(&report)?);
+                }
+                None => ui.print_info(&report, !matches!(query, InfoQuery::Pick)),
             }
         }
         Task::Select { clear: true, .. } => {
