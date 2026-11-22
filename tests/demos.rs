@@ -26,7 +26,7 @@ impl Example {
         let _ = fs::remove_dir_all(&root);
         copy_project(
             &Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("examples")
+                .join("demos")
                 .join(name),
             &root,
         );

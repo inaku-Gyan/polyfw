@@ -30,13 +30,13 @@ after the recipe name; their boundaries are preserved, including quoted paths wi
 With no arguments, it prints CLI help.
 
 The repository root has no firmware registry of its own. The three small
-[ARM examples](https://github.com/inaku-Gyan/polyfw/tree/main/examples) are consuming projects
-and integration-test inputs. Run one with the development binary:
+[ARM demo projects](https://github.com/inaku-Gyan/polyfw/tree/main/demos) are consuming projects
+and integration-test inputs. Run one with the development binary.
 
 ```sh
-just run --project-root examples/minimal info
-just run --project-root examples/minimal verify --all-firmwares
-just run --project-root examples/minimal build --all-firmwares --release
+just run --project-root demos/minimal info
+just run --project-root demos/minimal verify --all-firmwares
+just run --project-root demos/minimal build --all-firmwares --release
 ```
 
 Or point it at an existing consumer:
@@ -62,7 +62,7 @@ use the consuming workspaces' pins rather than inheriting the compiler used to r
 | `src/process.rs` | Stage execution, progress and child output |
 | `tests/library.rs` | Public Rust API exercised as a downstream caller |
 | `tests/project_root.rs`, `tests/standalone.rs` | Executable-level project isolation and external-tool boundaries |
-| `examples/`, `tests/demos.rs` | Self-contained Cortex-M projects and their end-to-end tests |
+| `demos/`, `tests/demos.rs` | Self-contained Cortex-M projects and their end-to-end tests |
 | `.github/workflows/release.yml` | Tag validation, native binary archives and publication |
 
 Edit the initialization template in `assets/polyfw.toml`. Its schema directive points to
@@ -86,7 +86,7 @@ Each description has one source:
 | User operations and JSON output | `docs/usage.md` | Match CLI parsing, command behavior and serialization |
 | Architecture and invariants | `docs/design.md` | Update alongside changes to ownership, algorithms or boundaries |
 | Contributor workflow | This document | Match recipes and automation |
-| Example projects | `examples/README.md` and each project's README | Keep shared commands in the index and project structure in each README |
+| Demo projects | `demos/README.md` and each project's README | Keep shared commands in the index and project structure in each README |
 | Publication procedure | `docs/releasing.md` | Match the tagged workflow |
 | Agent instructions | `AGENTS.md` | Keep repository-specific rules and conditional document pointers concise |
 

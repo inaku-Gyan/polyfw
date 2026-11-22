@@ -38,9 +38,9 @@ fix:
     cargo fmt
     cargo clippy --locked --all-targets --fix --allow-dirty --allow-staged
 
-# Clean build artifacts and remove example build directories.
+# Clean build artifacts and remove demo build directories.
 clean:
     cargo clean
     rm -rf dist
-    rm -rf examples/*/target
-    rm -rf examples/*/.polyfw-state
+    rm -rf demos/*/target
+    rm -rf demos/*/.polyfw-state

@@ -16,7 +16,7 @@ exclude = [
     "docs/adr/",
     "docs/research/",
     "dist/",
-    "examples/",
+    "demos/",
     "tests/demos.rs",
 ]
 

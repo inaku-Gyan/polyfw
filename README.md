@@ -164,7 +164,7 @@ For project loading, selection and process behavior, see [Rust library](docs/des
 | --- | --- |
 | Configure firmware, platforms, checks and editor generation | [Project configuration](docs/configuration.md) |
 | Select, build, test, flash, debug and troubleshoot | [Usage](docs/usage.md) |
-| Explore the ARM integration-test projects | [Examples](https://github.com/inaku-Gyan/polyfw/tree/main/examples) |
+| Explore the ARM integration-test projects | [Demos](https://github.com/inaku-Gyan/polyfw/tree/main/demos) |
 | Understand validation, dependency scopes and state management | [Design](docs/design.md) |
 | Develop polyfw and run checks | [Development](docs/development.md) |
 | Prepare and publish a release | [Releasing](docs/releasing.md) |

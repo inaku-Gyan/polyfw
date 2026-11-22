@@ -1,4 +1,4 @@
-# Examples
+# Demos
 
 | Project | Characteristics |
 | --- | --- |
@@ -8,10 +8,10 @@
 
 ## Common commands
 
-Run from the repository root. Set `project` to any example directory listed above:
+Run from the repository root. Set `project` to one of the directories listed above.
 
 ```sh
-project=examples/minimal
+project=demos/minimal
 just run --project-root "$project" info
 just run --project-root "$project" verify --all-firmwares
 just run --project-root "$project" build --all-firmwares --release
