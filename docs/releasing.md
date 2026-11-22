@@ -23,22 +23,6 @@ Prereleases go to both channels. GitHub marks them as prereleases and never sets
 Every stable release becomes `latest`. When publishing an older stable version, adjust `latest`
 manually afterward if a newer release should retain it.
 
-## Configure the publisher
-
-In the crate's crates.io settings, register a GitHub Actions
-[trusted publisher](https://crates.io/docs/trusted-publishing) matching the publishing job:
-
-| Field | Value |
-| --- | --- |
-| Repository owner | `inaku-Gyan` |
-| Repository name | `polyfw` |
-| Workflow filename | `release.yml` |
-| Environment | Leave empty; the publishing job declares no environment |
-
-The job grants `id-token: write` and uses `rust-lang/crates-io-auth-action` to exchange GitHub's
-identity for a short-lived registry token. Keep the registration aligned with any repository,
-workflow or environment change. No long-lived crates.io token is needed in GitHub secrets.
-
 ## Prepare a version
 
 Use the development setup and checks in [Development](development.md). In particular, Rust test

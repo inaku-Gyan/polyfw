@@ -1,3 +1,5 @@
+#:schema ../../assets/polyfw.schema.json
+
 config-version = "0.2.0"
 min-polyfw-version = "0.2.0"
 
