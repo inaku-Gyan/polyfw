@@ -95,6 +95,7 @@ pub(crate) struct Selection {
 pub(crate) struct FirmwareCargo {
     pub(crate) cargo: CargoContext,
     pub(crate) bin: String,
+    pub(crate) manifest_path: PathBuf,
 }
 
 #[cfg(test)]

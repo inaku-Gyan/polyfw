@@ -148,10 +148,7 @@ fn assert_verify_stages(output: &Output, expected: &[&str]) {
 
 fn artifact<'a>(report: &'a serde_json::Value, id: &str, profile: &str) -> &'a serde_json::Value {
     report["firmwares"][id]["artifacts"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|artifact| artifact["profile"] == profile)
+        .get(profile)
         .unwrap_or_else(|| panic!("missing {profile} artifact for {id}"))
 }
 
@@ -198,7 +195,7 @@ fn minimal_example_discovers_selects_and_builds_the_reported_artifact() {
     let example = Example::new("minimal");
     let output = succeeded(
         example
-            .command(&["info", "--json"])
+            .command(&["info", "--json=1"])
             .current_dir(example.root.join("src"))
             .output()
             .unwrap(),
@@ -208,6 +205,8 @@ fn minimal_example_discovers_selects_and_builds_the_reported_artifact() {
         Path::new(report["repository_root"].as_str().unwrap()),
         example.root
     );
+    assert!(report.get("format_version").is_none());
+    assert!(report.get("project_root").is_none());
     assert!(report["saved_selection"].is_null());
     assert_eq!(report["firmwares"]["hello"]["package"], "hello");
     for artifact in report["firmwares"]["hello"]["artifacts"]
@@ -291,11 +290,27 @@ fn minimal_example_verify_reports_a_host_test_failure_after_formatting_and_linti
 #[test]
 fn multi_firmware_example_switches_and_checks_only_the_selected_scope() {
     let example = Example::new("multi-firmware");
-    let report = example.json(&["info", "--json=1"]);
+    let report = example.json(&["info", "--json=2"]);
+    assert_eq!(report["format_version"], 2);
+    assert_eq!(
+        Path::new(report["project_root"].as_str().unwrap()),
+        example.root
+    );
+    assert!(report.get("repository_root").is_none());
     assert_eq!(report, example.json(&["info", "--json"]));
     assert_eq!(report["firmwares"].as_object().unwrap().len(), 2);
+    let legacy = example.json(&["info", "--firmware", "led-demo", "--json", "1"]);
+    assert_eq!(
+        legacy["firmwares"]["led-demo"]["local_dependencies"],
+        serde_json::json!([{
+            "package": "common",
+            "manifest_path": Path::new("common").join("Cargo.toml"),
+            "target": "embedded",
+        }])
+    );
     for id in ["led-demo", "buzzer-demo"] {
-        let details = example.json(&["info", "--firmware", id, "--json", "1"]);
+        assert!(report["firmwares"][id].get("local_dependencies").is_none());
+        let details = example.json(&["info", "--firmware", id, "--json", "2"]);
         assert_eq!(
             details,
             example.json(&["info", "--json=latest", "--firmware", id])
@@ -446,6 +461,17 @@ fn multi_workspace_example_reports_external_members_and_shared_scopes() {
         assert_eq!(firmware["platform"], platform);
         assert_eq!(firmware["package"], package);
         assert_eq!(firmware["bin"], id);
+        for field in ["target", "cpu", "chip"] {
+            assert_eq!(firmware[field], details["platforms"][platform][field]);
+        }
+        assert_eq!(
+            Path::new(firmware["manifest_path"].as_str().unwrap()),
+            example
+                .root
+                .join("firmwares")
+                .join(package)
+                .join("Cargo.toml")
+        );
         assert_eq!(
             Path::new(firmware["workspace"].as_str().unwrap()),
             example.root.join("bsp").join(platform)
@@ -467,8 +493,10 @@ fn multi_workspace_example_reports_external_members_and_shared_scopes() {
             let name = dependency["package"].as_str().unwrap();
             assert_eq!(
                 Path::new(dependency["manifest_path"].as_str().unwrap()),
-                Path::new("shared").join(name).join("Cargo.toml")
+                example.root.join("shared").join(name).join("Cargo.toml")
             );
+            assert_eq!(dependency["target_clippy"], true);
+            assert!(dependency.get("target").is_none());
         }
     }
 

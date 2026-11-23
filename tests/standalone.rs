@@ -59,7 +59,7 @@ fn info_rejects_unsupported_json_versions_before_opening_a_project() {
         assert!(output.stdout.is_empty());
         let stderr = String::from_utf8(output.stderr).unwrap();
         assert!(stderr.contains("invalid value '9999'"), "{stderr}");
-        assert!(stderr.contains("possible values: 1, latest"), "{stderr}");
+        assert!(stderr.contains("possible values: 1, 2, latest"), "{stderr}");
     }
 }
 

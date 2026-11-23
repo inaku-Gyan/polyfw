@@ -438,12 +438,11 @@ fn shared_intermediates_keep_same_named_final_images_independent() {
     }
     let info = fixture.info();
     for id in ["led-demo", "buzzer-demo"] {
-        let image = info["firmwares"][id]["artifacts"][0]["path"]
-            .as_str()
-            .unwrap();
+        let artifact = &info["firmwares"][id]["artifacts"]["dev"];
+        let image = artifact["path"].as_str().unwrap();
         let output = succeed(Command::new(image).output().unwrap());
         assert_eq!(String::from_utf8(output.stdout).unwrap().trim(), id);
-        assert_eq!(info["firmwares"][id]["artifacts"][0]["exists"], true);
+        assert_eq!(artifact["exists"], true);
     }
 }
 
@@ -481,17 +480,18 @@ fn external_members_can_supply_the_working_directory_without_changing_workspace_
         "",
     );
     let info = fixture.info();
+    let firmware = &info["firmwares"]["led-demo"];
+    assert_eq!(firmware["target"], "host-tuple");
+    assert_eq!(firmware["cpu"], "native");
+    assert_eq!(firmware["chip"], "test-chip");
     assert_eq!(
-        Path::new(info["firmwares"]["led-demo"]["workspace"].as_str().unwrap()),
+        Path::new(firmware["manifest_path"].as_str().unwrap()),
+        manifest
+    );
+    assert_eq!(
+        Path::new(firmware["workspace"].as_str().unwrap()),
         fixture.workspace
     );
-    assert_eq!(
-        Path::new(
-            info["firmwares"]["led-demo"]["working_dir"]
-                .as_str()
-                .unwrap()
-        ),
-        member
-    );
+    assert_eq!(Path::new(firmware["working_dir"].as_str().unwrap()), member);
     succeed(fixture.command(&["build", "led-demo"]).output().unwrap());
 }

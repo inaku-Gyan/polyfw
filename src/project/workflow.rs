@@ -590,6 +590,7 @@ mod tests {
                 packages: vec![PackageScope {
                     name: "common".into(),
                     manifest_path: "common/Cargo.toml".into(),
+                    absolute_manifest_path: context.root.join("common/Cargo.toml"),
                     embedded: true,
                     id: "common-id".into(),
                     host_id: "common-owner-id".into(),
@@ -972,6 +973,7 @@ mod tests {
                 FirmwareCargo {
                     bin: "test-firmware".into(),
                     cargo: CargoContext::fixture(&root, "test-platform"),
+                    manifest_path: root.join("platform/test/firmware/Cargo.toml"),
                 },
             )]),
             registry: Registry {

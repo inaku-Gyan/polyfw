@@ -222,6 +222,8 @@ impl RttChannelMode {
 pub(crate) enum InfoJsonVersion {
     #[value(name = "1")]
     V1,
+    #[value(name = "2")]
+    V2,
     Latest,
 }
 
@@ -268,8 +270,8 @@ pub(crate) enum Task {
   polyfw info
   polyfw info --firmware
   polyfw info --firmware led-demo
-  polyfw info --json 1
-  polyfw info --firmware buzzer-demo --json=1"
+  polyfw info --json 2
+  polyfw info --firmware buzzer-demo --json=2"
     )]
     Info {
         /// Show one firmware's details; omit FIRMWARE to pick interactively without saving.
@@ -572,7 +574,7 @@ mod tests {
 
     #[test]
     fn info_distinguishes_an_overview_a_picker_and_a_named_firmware() {
-        use InfoJsonVersion::{Latest, V1};
+        use InfoJsonVersion::{Latest, V1, V2};
 
         for command in ["info", "i"] {
             for (flags, expected_firmware, expected_json) in [
@@ -583,6 +585,8 @@ mod tests {
                 (vec!["--json", "--firmware"], None, Some(Latest)),
                 (vec!["--firmware", "--json=1"], None, Some(V1)),
                 (vec!["--json", "1", "--firmware"], None, Some(V1)),
+                (vec!["--firmware", "--json=2"], None, Some(V2)),
+                (vec!["--json", "2", "--firmware"], None, Some(V2)),
                 (
                     vec!["--firmware", "sentry-chassis"],
                     Some("sentry-chassis"),

@@ -19,6 +19,7 @@ pub(crate) struct WorkspaceScope {
 pub(crate) struct PackageScope {
     pub(crate) name: String,
     pub(crate) manifest_path: PathBuf,
+    pub(crate) absolute_manifest_path: PathBuf,
     pub(crate) embedded: bool,
     pub(crate) id: String,
     pub(crate) host_id: String,
@@ -267,6 +268,7 @@ impl Resolver {
                         PackageScope {
                             name: package.name.clone(),
                             manifest_path: project_relative(&self.root, &manifest),
+                            absolute_manifest_path: manifest,
                             embedded: role == CompilationTarget::Embedded,
                             id: id.clone(),
                             host_id,

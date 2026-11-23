@@ -53,10 +53,13 @@ pub struct FirmwareInfo {
     pub platform: String,
     pub package: String,
     pub bin: String,
+    /// Absolute path to the firmware package's `Cargo.toml`, as reported by Cargo.
+    pub manifest_path: PathBuf,
     pub workspace: PathBuf,
     pub working_dir: PathBuf,
     pub target_dir: PathBuf,
     pub build_dir: Option<PathBuf>,
+    /// Resolved target name used in Cargo's artifact directory layout.
     pub target: String,
     pub check_platform: bool,
     pub artifacts: Vec<Artifact>,
@@ -69,7 +72,10 @@ pub struct FirmwareInfo {
 #[non_exhaustive]
 pub struct DependencyInfo {
     pub name: String,
+    /// Path to the manifest relative to the project root when possible.
     pub manifest_path: PathBuf,
+    /// Absolute path to the dependency's `Cargo.toml`.
+    pub absolute_manifest_path: PathBuf,
     /// Whether this dependency participates in the target-side check scope.
     pub embedded: bool,
 }
@@ -121,6 +127,7 @@ impl ProjectInfo {
         let mut platforms = BTreeMap::new();
         let mut firmwares = BTreeMap::new();
         for mut selection in selections {
+            let manifest_path = context.cargo[&selection.id].manifest_path.clone();
             platforms
                 .entry(selection.firmware.platform.clone())
                 .or_insert_with(|| {
@@ -144,6 +151,7 @@ impl ProjectInfo {
                         .map(|package| DependencyInfo {
                             name: package.name,
                             manifest_path: package.manifest_path,
+                            absolute_manifest_path: package.absolute_manifest_path,
                             embedded: package.embedded,
                         })
                         .collect(),
@@ -165,6 +173,7 @@ impl ProjectInfo {
                     platform: selection.firmware.platform,
                     package: selection.firmware.package,
                     bin: selection.resolved_bin,
+                    manifest_path,
                     workspace: selection.cargo.workspace,
                     working_dir: selection.cargo.working_dir,
                     target_dir: selection.cargo.target_dir,

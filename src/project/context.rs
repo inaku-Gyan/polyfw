@@ -726,6 +726,7 @@ mod tests {
                 FirmwareCargo {
                     bin: "test-firmware".into(),
                     cargo: CargoContext::fixture(&root, "test-platform"),
+                    manifest_path: root.join("platform/test/firmware/Cargo.toml"),
                 },
             )]),
             registry: Registry {

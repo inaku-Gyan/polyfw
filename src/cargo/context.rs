@@ -98,7 +98,14 @@ pub(crate) fn resolve(root: &Path, registry: &Registry) -> Result<BTreeMap<Strin
             .build_directory
             .clone()
             .or_else(|| cargo.build_dir_override.clone());
-        resolved.insert(id.clone(), FirmwareCargo { cargo, bin });
+        resolved.insert(
+            id.clone(),
+            FirmwareCargo {
+                cargo,
+                bin,
+                manifest_path: package.manifest_path.clone(),
+            },
+        );
     }
     Ok(resolved)
 }

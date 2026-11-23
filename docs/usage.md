@@ -103,7 +103,7 @@ A successful save remains even if the following build or hardware action fails.
 ```sh
 polyfw info
 polyfw info --firmware led-demo
-polyfw info --firmware buzzer-demo --json=1 > buzzer-demo.json
+polyfw info --firmware buzzer-demo --json=2 > buzzer-demo.json
 ```
 
 The overview lists all firmwares, their referenced platforms, the saved selection, and dev/release ELF
@@ -122,36 +122,62 @@ fails. An ELF marked `present` may be older than the source or differ from the r
 
 ### JSON format versions
 
-Pass `--json=1` or `--json 1` to select format version 1. `--json=latest`, `--json latest` and bare
-`--json` select the highest format version supported by the running binary. An unsupported version
-fails argument parsing before project discovery, and the error lists the supported values.
+Pass `--json=2` or `--json 2` to select format version 2. Use `--json=1` or `--json 1` for format
+version 1. `--json=latest`, `--json latest` and bare `--json` select the highest format version
+supported by the running binary, currently version 2. An unsupported version fails argument
+parsing before project discovery, and the error lists the supported values.
 
 Format versions are independent of polyfw releases. Each numbered version fixes the JSON fields,
 types, omission rules and meanings for both views. Contract changes, including new fields, use a
 new format version. New formats ship alongside existing numbered versions. The release notes
 announce any planned removals in advance. JSON object key order and whitespace may vary.
 
-Format version 1 contains these fields.
+Both format versions include these fields.
 
 | Field | Meaning |
 | --- | --- |
-| `repository_root` | Absolute operating project root |
 | `saved_selection` | Saved `firmware` and optional `profile`; omitted if no state exists |
-| `platforms` | Map of platforms referenced by the reported firmwares, with optional `description`, declared `target`, `cpu`, `chip` and `registered_firmwares` |
+| `platforms` | Map of referenced platforms with optional `description`, declared `target`, `cpu` and `chip`, and `registered_firmwares` counted across the registry |
 | `firmwares` | Map of firmwares, limited to the requested firmware when using `--firmware` |
 | `firmwares[ID].description`, `.platform`, `.package`, `.bin` | Optional description, registry values and the resolved binary name |
 | `firmwares[ID].workspace`, `.working_dir` | Discovered Cargo workspace and actual invocation directory |
 | `firmwares[ID].target_dir`, `.build_dir` | Effective final/intermediate directories; `build_dir` is omitted if Cargo does not report it and no explicit override supplies it |
-| `firmwares[ID].target`, `.check_platform` | Resolved artifact target name and inherited consistency-check policy |
-| `firmwares[ID].artifacts` | Ordered `{profile, path, exists}` entries for dev, release and any different saved profile |
-| `firmwares[ID].local_dependencies` | Details only: dependency `{package, manifest_path, target}` entries, excluding the firmware itself |
+| `firmwares[ID].check_platform` | Inherited consistency-check policy |
 
-Workspace and artifact paths are absolute. Dependency manifest paths are project-relative,
-including `../` for external packages, or absolute when they cannot share a filesystem prefix.
-Dependencies are sorted by package name and path; their `target` is `embedded` or `host`.
-`cpu` is the required declaration, including when native flags override it. Missing saved
-selection, saved profile, descriptions and overview dependency details are omitted; `false`, empty
-arrays and explicitly supplied description strings, including empty strings, are retained.
+Directory and artifact paths are absolute. Artifacts report the expected path and whether a file
+was present at that path when queried. Both views report dev, release and any different saved
+profile. Only the detail view includes `local_dependencies`, excluding the firmware itself.
+Dependencies are sorted by package name and manifest path. Missing saved selection, saved profile
+and descriptions are omitted. `false`, empty arrays and explicitly supplied description strings,
+including empty strings, are retained.
+
+#### Format version 2
+
+| Field | Meaning |
+| --- | --- |
+| `format_version` | Integer `2` |
+| `project_root` | Absolute path to the directory containing `polyfw.toml` |
+| `firmwares[ID].target`, `.cpu`, `.chip` | Values declared by the firmware's platform in `polyfw.toml` |
+| `firmwares[ID].manifest_path` | Absolute path to the firmware package's `Cargo.toml` |
+| `firmwares[ID].artifacts` | Map from profile name to `{path, exists}` |
+| `firmwares[ID].local_dependencies` | Detail entries with `package`, absolute `manifest_path` and boolean `target_clippy` |
+
+`target` preserves values such as `host-tuple` and relative custom target arguments. `cpu` reports
+the platform declaration even if Cargo flags override it. All reported dependencies participate
+in host checks. `target_clippy` identifies those included in target-side Clippy as well.
+
+#### Format version 1
+
+| Field | Meaning |
+| --- | --- |
+| `repository_root` | Absolute path to the directory containing `polyfw.toml` |
+| `firmwares[ID].target` | Resolved artifact target name |
+| `firmwares[ID].artifacts` | Ordered `{profile, path, exists}` entries for dev, release and any different saved profile |
+| `firmwares[ID].local_dependencies` | Detail entries with `package`, `manifest_path` and `target` |
+
+Dependency manifest paths are project-relative, including `../` for external packages, or absolute
+when they cannot share a filesystem prefix. A dependency's `target` is `embedded` if it participates
+in target-side Clippy and `host` otherwise.
 
 JSON goes to stdout; interactive prompts go to stderr. Name the firmware in scripts so terminal
 availability and picker cancellation cannot change the result.
@@ -298,7 +324,7 @@ polyfw verify --all-firmwares
 polyfw build --all-firmwares --release
 ```
 
-Use `polyfw info --firmware led-demo --json=1` when a script needs resolved paths. See
+Use `polyfw info --firmware led-demo --json=2` when a script needs resolved paths. See
 [JSON format versions](#json-format-versions) for the compatibility contract.
 
 Build and check output includes numbered stages, status and elapsed time. Redirected output omits

@@ -62,13 +62,17 @@ fn firmware_paths_follow_explicit_platform_and_cpu_reporting_remains_declarative
         "thumbv7em-none-eabihf"
     );
     assert_eq!(overridden["platforms"]["model"]["cpu"], "cortex-m7");
-    let artifact = &overridden["firmwares"]["firmware"]["artifacts"][0]["path"];
+    let firmware = &overridden["firmwares"]["firmware"];
+    assert_eq!(firmware["target"], "thumbv7em-none-eabihf");
+    assert_eq!(firmware["cpu"], "cortex-m7");
+    assert_eq!(firmware["chip"], "test-chip");
+    let artifact = &firmware["artifacts"]["dev"]["path"];
     assert!(
         Path::new(artifact.as_str().unwrap())
             .ends_with("target/firmware/model/thumbv7em-none-eabihf/debug/application")
     );
     assert_eq!(
-        info(&[("RUSTFLAGS", "")])["platforms"]["model"]["cpu"],
+        info(&[("RUSTFLAGS", "")])["firmwares"]["firmware"]["cpu"],
         "cortex-m7"
     );
     fs::remove_dir_all(root).unwrap();
