@@ -43,7 +43,7 @@ jobs:
           # The justfile's Clippy step still enforces -D warnings for our code.
           build-warnings: warn
 
-      - uses: taiki-e/install-action@v2.90.5
+      - uses: taiki-e/install-action@v2.90.6
         with:
           tool: just@1.58.0
 
