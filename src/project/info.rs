@@ -175,7 +175,7 @@ impl ProjectInfo {
                     working_dir: selection.cargo.working_dir,
                     target_dir: selection.cargo.target_dir,
                     build_dir: selection.cargo.build_dir,
-                    target: selection.cargo.target,
+                    target: selection.cargo.target.name,
                     artifacts,
                     local_dependencies,
                 },

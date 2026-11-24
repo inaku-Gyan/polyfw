@@ -16,6 +16,7 @@ struct Project {
 #[test]
 fn info_requires_a_terminal_to_pick_even_when_a_firmware_is_saved() {
     let fixture = Project::new("info-picker");
+    fixture.config("", "target-dir = \"../images/led\"", "");
     let state = fixture.project.join(".polyfw-state/selected");
     let launch = fixture.project.join(".vscode/launch.json");
     for saved in [false, true] {
@@ -108,6 +109,24 @@ impl Project {
         )).unwrap();
     }
 
+    fn split_workspaces(&self) {
+        let buzzer_workspace = self.root.join("buzzer-workspace");
+        fs::rename(self.workspace.join("buzzer-demo"), &buzzer_workspace).unwrap();
+        fs::write(
+            self.workspace.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"led-demo\"]\nresolver = \"3\"\n",
+        )
+        .unwrap();
+        for workspace in [&self.workspace, &buzzer_workspace] {
+            succeed(
+                support::workspace_cargo(workspace)
+                    .args(["generate-lockfile", "--offline"])
+                    .output()
+                    .unwrap(),
+            );
+        }
+    }
+
     fn command(&self, args: &[&str]) -> Command {
         let mut command = support::plfw();
         command
@@ -139,6 +158,227 @@ fn succeed(output: Output) -> Output {
         String::from_utf8_lossy(&output.stderr)
     );
     output
+}
+
+fn assert_ambiguous_image(output: Output, firmwares: [&str; 2], image: &str) {
+    assert!(
+        !output.status.success(),
+        "command accepted the shared image"
+    );
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    for expected in [
+        "ambiguous firmware image",
+        firmwares[0],
+        firmwares[1],
+        image,
+        "target-dir",
+    ] {
+        assert!(stderr.contains(expected), "{stderr}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn probe_actions_reject_shared_images_from_different_workspaces() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let fixture = Project::new("ambiguous-probe-image");
+    fixture.split_workspaces();
+    fixture.config(
+        "target-dir = \"../images\"",
+        "",
+        "working-dir = \"../buzzer-workspace\"",
+    );
+    succeed(
+        fixture
+            .command(&["build", "--all-firmwares", "--release"])
+            .output()
+            .unwrap(),
+    );
+    let info = fixture.info();
+    let led = &info["firmwares"]["led-demo"]["artifacts"]["release"];
+    let buzzer = &info["firmwares"]["buzzer-demo"]["artifacts"]["release"];
+    let image = led["path"].as_str().unwrap();
+    assert_eq!(buzzer["path"], image);
+    assert_eq!(led["exists"], true);
+    assert_eq!(buzzer["exists"], true);
+
+    let tools = fixture.root.join("tools");
+    fs::create_dir(&tools).unwrap();
+    let probe = tools.join("probe-rs");
+    fs::write(
+        &probe,
+        "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$POLYFW_TEST_PROBE_LOG\"\n",
+    )
+    .unwrap();
+    fs::set_permissions(probe, fs::Permissions::from_mode(0o755)).unwrap();
+    let path = std::env::var_os("PATH").unwrap();
+    let path =
+        std::env::join_paths(std::iter::once(tools).chain(std::env::split_paths(&path))).unwrap();
+    let log = fixture.root.join("probe-args");
+    for action in ["flash", "run", "attach"] {
+        let output = fixture
+            .command(&[action, "led-demo", "--release"])
+            .env("PATH", &path)
+            .env("POLYFW_TEST_PROBE_LOG", &log)
+            .output()
+            .unwrap();
+        assert!(!log.exists(), "{action} launched probe-rs");
+        assert_ambiguous_image(output, ["led-demo", "buzzer-demo"], image);
+    }
+}
+
+#[test]
+fn an_ambiguous_debug_image_leaves_the_existing_selection_and_launch_file_intact() {
+    let fixture = Project::new("ambiguous-debug-image");
+    fixture.config(
+        "",
+        "target-dir = \"images/led\"",
+        "target-dir = \"images/buzzer\"",
+    );
+    succeed(
+        fixture
+            .command(&["select", "buzzer-demo", "--dev"])
+            .output()
+            .unwrap(),
+    );
+    let state = fixture.project.join(".polyfw-state/selected");
+    let launch = fixture.project.join(".vscode/launch.json");
+    let previous_state = fs::read(&state).unwrap();
+    let previous_launch = fs::read(&launch).unwrap();
+    let config = fixture.project.join("polyfw.toml");
+    let source = fs::read_to_string(&config).unwrap();
+    let conflict = format!(
+        "{source}\n[platforms.other-board]\ntarget = \"host-tuple\"\nchip = \"another-chip\"\n\
+         working-dir = \"../workspace\"\ntarget-dir = \"images/led\"\n\
+         [firmwares.led-other-chip]\nplatform = \"other-board\"\npackage = \"led-demo\"\n"
+    );
+    fs::write(&config, &conflict).unwrap();
+    let info = fixture.info();
+    let artifact = &info["firmwares"]["led-other-chip"]["artifacts"]["release"];
+    assert_eq!(artifact["exists"], false);
+    assert_ambiguous_image(
+        fixture
+            .command(&["select", "led-other-chip", "--release"])
+            .output()
+            .unwrap(),
+        ["led-demo", "led-other-chip"],
+        artifact["path"].as_str().unwrap(),
+    );
+    assert_eq!(fs::read(&state).unwrap(), previous_state);
+    assert_eq!(fs::read(&launch).unwrap(), previous_launch);
+
+    fs::write(
+        &config,
+        format!("{conflict}\n[config.vscode]\nenabled = false\n"),
+    )
+    .unwrap();
+    succeed(
+        fixture
+            .command(&["select", "led-other-chip", "--release"])
+            .output()
+            .unwrap(),
+    );
+    assert_eq!(
+        fixture.info()["saved_selection"]["firmware"],
+        "led-other-chip"
+    );
+    assert_eq!(fs::read(&launch).unwrap(), previous_launch);
+}
+
+#[cfg(unix)]
+#[test]
+fn debug_setup_detects_shared_output_through_a_symlink_before_building() {
+    use std::os::unix::fs::symlink;
+
+    let fixture = Project::new("symlinked-image");
+    let images = fixture.root.join("images");
+    fs::create_dir(&images).unwrap();
+    symlink(&images, fixture.root.join("alias")).unwrap();
+    fixture.config(
+        "",
+        "target-dir = \"../images/new\"",
+        "target-dir = \"../alias/new\"",
+    );
+    let info = fixture.info();
+    let image = info["firmwares"]["led-demo"]["artifacts"]["dev"]["path"]
+        .as_str()
+        .unwrap();
+    assert!(!images.join("new").exists());
+    assert_ambiguous_image(
+        fixture.command(&["select", "led-demo"]).output().unwrap(),
+        ["led-demo", "buzzer-demo"],
+        image,
+    );
+    assert!(!fixture.project.join(".vscode/launch.json").exists());
+    assert!(!fixture.project.join(".polyfw-state/selected").exists());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn debug_setup_distinguishes_custom_targets_with_the_same_filename() {
+    let fixture = Project::new("custom-target-image");
+    let output = succeed(
+        support::workspace_command(&fixture.workspace, "rustc")
+            .env("RUSTC_BOOTSTRAP", "1")
+            .args(["-Z", "unstable-options", "--print", "target-spec-json"])
+            .output()
+            .unwrap(),
+    );
+    let mut spec: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    spec["exe-suffix"] = ".elf".into();
+    for (directory, panic_strategy) in [("target-a", "abort"), ("target-b", "unwind")] {
+        let directory = fixture.workspace.join(directory);
+        fs::create_dir(&directory).unwrap();
+        spec["panic-strategy"] = panic_strategy.into();
+        fs::write(
+            directory.join("board.json"),
+            serde_json::to_vec(&spec).unwrap(),
+        )
+        .unwrap();
+    }
+    std::os::unix::fs::symlink(
+        "../target-a/board.json",
+        fixture.workspace.join("target-b/alias.json"),
+    )
+    .unwrap();
+    let cache = fixture.root.join("cache");
+    fs::create_dir(&cache).unwrap();
+    std::os::unix::fs::symlink(cache, fixture.root.join("cache-alias")).unwrap();
+
+    let config = fixture.project.join("polyfw.toml");
+    let mut source = fs::read_to_string(&config).unwrap();
+    for (id, target, cache) in [
+        ("target-a", "target-a/board.json", "../cache/new"),
+        ("target-b", "target-b/alias.json", "../cache-alias/new"),
+    ] {
+        source.push_str(&format!(
+            "\n[platforms.{id}]\ntarget = {target:?}\nchip = \"test-chip\"\n\
+             working-dir = \"../workspace\"\ntarget-dir = \"images\"\nbuild-dir = {cache:?}\n\
+             [firmwares.{id}]\nplatform = {id:?}\npackage = \"led-demo\"\n"
+        ));
+    }
+    fs::write(&config, &source).unwrap();
+    succeed(fixture.command(&["select", "target-a"]).output().unwrap());
+
+    fs::write(
+        &config,
+        source.replace("target-b/alias.json", "target-b/board.json"),
+    )
+    .unwrap();
+    let info = fixture.info();
+    let image = info["firmwares"]["target-a"]["artifacts"]["dev"]["path"]
+        .as_str()
+        .unwrap();
+    assert!(
+        image.ends_with("images/board/debug/demo-image.elf"),
+        "{image}"
+    );
+    assert_ambiguous_image(
+        fixture.command(&["select", "target-a"]).output().unwrap(),
+        ["target-a", "target-b"],
+        image,
+    );
 }
 
 #[test]
@@ -192,7 +432,7 @@ fn build_rejects_a_skipped_binary_even_when_an_old_executable_exists() {
 #[test]
 fn launch_paths_round_trip_literal_backslashes_in_linux_directories() {
     let fixture = Project::new("backslash-output");
-    fixture.config(r#"target-dir = 'out\logs'"#, "", "");
+    fixture.config("", r#"target-dir = 'out\logs'"#, "");
     let output_dir = fixture.project.join(r"out\logs");
     let output = succeed(
         support::workspace_cargo(&fixture.workspace)
@@ -568,10 +808,11 @@ fn removed_compiler_fields_are_rejected_in_configuration() {
 #[test]
 fn shared_intermediates_keep_same_named_final_images_independent() {
     let fixture = Project::new("split-outputs");
+    fixture.split_workspaces();
     fixture.config(
         "build-dir = \"../cache\"",
         "target-dir = \"../images/led\"",
-        "target-dir = \"../images/buzzer\"",
+        "target-dir = \"../images/buzzer\"\nworking-dir = \"../buzzer-workspace\"",
     );
     for id in ["led-demo", "buzzer-demo", "led-demo"] {
         succeed(fixture.command(&["build", id]).output().unwrap());

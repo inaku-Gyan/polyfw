@@ -4,7 +4,7 @@ use std::process::Command;
 
 use serde::Deserialize;
 
-use super::model::{CargoContext, Selection};
+use super::model::{CargoContext, ResolvedTarget, Selection};
 use crate::profile::Profile;
 
 pub(crate) fn workspace_cargo(workspace: &Path) -> Command {
@@ -108,7 +108,7 @@ pub(crate) fn resolve_target(
     working_dir: &Path,
     target: &str,
     build_dir: bool,
-) -> crate::InternalResult<(String, String)> {
+) -> crate::InternalResult<ResolvedTarget> {
     let mut host = None;
     if target == "host-tuple" || build_dir {
         let output = workspace_cargo(working_dir).arg("-vV").output()?;
@@ -160,10 +160,14 @@ pub(crate) fn resolve_target(
     } else {
         ""
     };
-    Ok((target, suffix.into()))
+    Ok(ResolvedTarget {
+        name: target,
+        executable_suffix: suffix.into(),
+        spec_path: None,
+    })
 }
 
-fn resolve_custom_target(path: &Path) -> crate::InternalResult<(String, String)> {
+fn resolve_custom_target(path: &Path) -> crate::InternalResult<ResolvedTarget> {
     #[derive(Deserialize)]
     struct TargetSpec {
         #[serde(rename = "exe-suffix")]
@@ -184,7 +188,11 @@ fn resolve_custom_target(path: &Path) -> crate::InternalResult<(String, String)>
         .map_err(|error| format!("could not open custom target {}: {error}", path.display()))?;
     let spec: TargetSpec = serde_json::from_reader(std::io::BufReader::new(file))
         .map_err(|error| format!("could not read custom target {}: {error}", path.display()))?;
-    Ok((name.to_owned(), spec.executable_suffix.unwrap_or_default()))
+    Ok(ResolvedTarget {
+        name: name.to_owned(),
+        executable_suffix: spec.executable_suffix.unwrap_or_default(),
+        spec_path: Some(path),
+    })
 }
 
 pub(crate) fn firmware_elf_path(selection: &Selection, executable: Option<PathBuf>) -> PathBuf {
@@ -194,7 +202,7 @@ pub(crate) fn firmware_elf_path(selection: &Selection, executable: Option<PathBu
     selection
         .cargo
         .target_dir
-        .join(&selection.cargo.target)
+        .join(&selection.cargo.target.name)
         .join(
             selection
                 .profile
@@ -203,7 +211,7 @@ pub(crate) fn firmware_elf_path(selection: &Selection, executable: Option<PathBu
         )
         .join(format!(
             "{}{}",
-            selection.resolved_bin.name, selection.cargo.executable_suffix
+            selection.resolved_bin.name, selection.cargo.target.executable_suffix
         ))
 }
 
@@ -401,7 +409,7 @@ mod tests {
         )
         .unwrap();
         let mut cargo = CargoContext::fixture(&root, "firmware-family");
-        cargo.target = target.clone();
+        cargo.target.name = target.clone();
         let mut command = target_cargo(&cargo, "rustc", &target);
         let target_dir = root.join("target/firmware/firmware-family");
         assert_eq!(command.get_current_dir(), Some(workspace.as_path()));

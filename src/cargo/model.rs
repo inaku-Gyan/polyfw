@@ -14,9 +14,16 @@ pub(crate) struct CargoContext {
     pub(crate) build_dir: Option<PathBuf>,
     pub(crate) target_dir_override: Option<PathBuf>,
     pub(crate) build_dir_override: Option<PathBuf>,
+    pub(crate) target: ResolvedTarget,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct ResolvedTarget {
     /// Concrete triple or custom-target file stem for Cargo's public output layout.
-    pub(crate) target: String,
+    pub(crate) name: String,
     pub(crate) executable_suffix: String,
+    /// Canonical file path for an explicit target specification.
+    pub(crate) spec_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -117,7 +124,10 @@ impl CargoContext {
             workspace: root.join("platform/test"),
             target_dir: target_dir.clone(),
             target_dir_override: Some(target_dir),
-            target: "thumbv7em-none-eabihf".into(),
+            target: ResolvedTarget {
+                name: "thumbv7em-none-eabihf".into(),
+                ..ResolvedTarget::default()
+            },
             ..Self::default()
         }
     }

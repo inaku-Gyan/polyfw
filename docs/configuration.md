@@ -270,7 +270,8 @@ A Platform is independent of workspace ownership. Cargo fingerprints account for
 features and dependencies even when firmwares share a platform. Share `build-dir` to reuse
 compatible intermediates and choose distinct `target-dir` values when final images must coexist.
 Cargo can replace a shared final filename in a later build. polyfw uses Cargo's public artifact
-layout to find the final images.
+layout to find the final images. See the [shared image check](usage.md#flash-and-monitor) for
+flashing and debugging.
 
 The `#:schema` URL pins the release named by `config-version`, including patch and prerelease
 suffixes: for example, `0.2.0-rc.1` uses `v0.2.0-rc.1`. A newer compatible CLI can operate on

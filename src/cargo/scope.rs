@@ -34,7 +34,8 @@ pub(crate) fn host_scopes(scopes: &[WorkspaceScope]) -> Vec<HostScope<'_>> {
     let mut contexts = BTreeMap::<CargoContext, BTreeMap<&Path, &PackageScope>>::new();
     for package in scopes.iter().flat_map(|scope| &scope.packages) {
         let mut cargo = package.cargo.clone();
-        cargo.target.clear();
+        cargo.target.name.clear();
+        cargo.target.spec_path = None;
         contexts
             .entry(cargo)
             .or_default()

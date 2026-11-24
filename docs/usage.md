@@ -259,6 +259,11 @@ plfw run buzzer-demo --release
 `run`, `flash` and `attach` use an existing ELF and **never build**. `attach` needs the ELF that
 matches the running firmware. `reset` requires no ELF. The registry supplies the chip.
 
+Before starting probe-rs, `run`, `flash` and `attach` check the expected image path at the effective
+profile against the other registered firmwares. They report the path and the conflicting firmware
+IDs if different Cargo builds or chips share it. Set distinct `target-dir` values for those
+firmwares. Compatible intermediates can share a `build-dir`.
+
 The four firmware hardware commands accept transient `--probe VID:PID[:SERIAL]`, `--speed KHZ` and
 `--connect-under-reset` options. Omitted probe/speed options are delegated to probe-rs. For example:
 
@@ -302,6 +307,10 @@ profile omits the name suffix and uses the debug ELF.
 - **Attach** uses the existing image without flashing or resetting; connecting may pause the core.
 
 Both use SWD, core 0 and RTT channel 0 with `Defmt`/`NoBlockSkip`. Neither builds the image.
+Generating the launch file applies the [shared image check](#flash-and-monitor), including before
+the first build. A conflict fails the selection save before either file is written. The generated
+entries reflect the registry and paths at the time of the last successful save.
+
 One-time CLI overrides leave the launch file unchanged; every selection save replaces the
 entire file, and clearing selection deletes it. CLI probe flags are not saved into debugger
 settings. Multiple connected probes need an explicit DAP probe selector; use a manually managed

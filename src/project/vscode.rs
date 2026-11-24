@@ -1,13 +1,13 @@
+use std::path::Path;
+
 use serde_json::json;
 
 use crate::InternalResult as Result;
 use crate::cargo::model::Selection;
-use crate::cargo::runner::firmware_elf_path;
 
 pub(crate) const LAUNCH_FILE: &str = ".vscode/launch.json";
 
-pub(crate) fn configuration(selection: &Selection) -> Result<String> {
-    let elf_path = firmware_elf_path(selection, None);
+pub(crate) fn configuration(selection: &Selection, elf_path: &Path) -> Result<String> {
     let elf = elf_path.to_string_lossy();
     #[cfg(windows)]
     let elf = elf.replace('\\', "/");

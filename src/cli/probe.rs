@@ -48,7 +48,7 @@ pub(crate) fn run(
     let (firmware, image) = if matches!(action, Action::Reset) {
         (project.resolve_firmware(choice, options)?, None)
     } else {
-        artifact = project.artifact(choice, profile, options)?;
+        artifact = project.artifact_for_hardware(choice, profile, options)?;
         let firmware = project
             .firmware(&artifact.firmware)
             .expect("resolved artifact belongs to registered firmware");

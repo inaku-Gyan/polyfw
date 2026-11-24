@@ -1,3 +1,4 @@
+mod artifact;
 pub(crate) mod context;
 mod info;
 mod init;
@@ -8,6 +9,7 @@ mod workflow;
 use std::io;
 use std::path::Path;
 
+use crate::cargo::model::Selection;
 use crate::{OutputMode, Profile, ProgressEvent, Result, RunReport};
 
 use context::{Context, discover_root, exact_root};
@@ -182,13 +184,38 @@ impl Project {
         &self,
         choice: FirmwareChoice<'_>,
         profile: Option<&Profile>,
-        mut options: Options<'_>,
+        options: Options<'_>,
     ) -> Result<Artifact> {
+        let (_, selection) = self.select_artifact(choice, profile, options)?;
+        Ok(Artifact::from_selection(&selection, None))
+    }
+
+    /// Resolves an ELF for hardware use and rejects paths shared by different builds or chips.
+    ///
+    /// The returned artifact reports whether the file is present.
+    pub fn artifact_for_hardware(
+        &self,
+        choice: FirmwareChoice<'_>,
+        profile: Option<&Profile>,
+        options: Options<'_>,
+    ) -> Result<Artifact> {
+        let (context, selection) = self.select_artifact(choice, profile, options)?;
+        let artifact = Artifact::from_selection(&selection, None);
+        context.validate_artifact(&selection, &artifact.path)?;
+        Ok(artifact)
+    }
+
+    fn select_artifact(
+        &self,
+        choice: FirmwareChoice<'_>,
+        profile: Option<&Profile>,
+        mut options: Options<'_>,
+    ) -> Result<(Context, Selection)> {
         let context = self.context.resolved()?;
         let (id, profile) = context.choose_firmware(choice, profile, &mut options)?;
         let mut selection = context.selection(&id)?;
         selection.profile = profile;
-        Ok(Artifact::from_selection(&selection, None))
+        Ok((context, selection))
     }
 
     /// Reads saved state, including a firmware ID that has since been removed.

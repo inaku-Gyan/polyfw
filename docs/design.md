@@ -158,6 +158,13 @@ Compatible intermediates can share build-dir while separate target-dir values pr
 final images. Cargo can replace a shared public filename in a later build. Cargo fingerprints
 decide reuse.
 
+Hardware actions that consume an ELF and managed editor generation check for ambiguous final paths
+among registered firmwares at the effective profile. The comparison resolves the nearest existing
+path ancestor so directory aliases are recognized before the first build. A shared path is valid
+when the registrations resolve to the same Cargo workspace, working directory, package, binary,
+compilation target, intermediate directory and chip. Custom target identity includes the resolved
+JSON file. See [hardware usage](usage.md#flash-and-monitor) for the diagnostic and resolution.
+
 Single-firmware clean delegates package cleanup with firmware and host targets using Cargo's
 default profile rules. All-firmware clean deduplicates directory contexts and delegates full
 cleanup; shared directories can include unregistered/manual outputs. No Platform isolation is

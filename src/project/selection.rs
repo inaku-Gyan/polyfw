@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use crate::cargo::runner::firmware_elf_path;
 use crate::{Error, ErrorKind, InternalResult, Profile, Result, files};
 
 use super::{FirmwareSummary, context::Context, vscode};
@@ -212,8 +213,10 @@ impl Context {
         let launch = if self.registry.config.vscode.enabled {
             let mut selection = self.selection(id)?;
             selection.profile = profile.cloned();
+            let path = firmware_elf_path(&selection, None);
+            self.validate_artifact(&selection, &path)?;
             Some(
-                vscode::configuration(&selection)
+                vscode::configuration(&selection, &path)
                     .map_err(|error| Error::new(ErrorKind::SelectionWrite, error))?,
             )
         } else {

@@ -128,6 +128,7 @@ mod tests {
         context.cargo.get_mut("test-firmware").unwrap().bin.name = "robot-image".into();
         let mut other_platform = context.registry.platforms["test-platform"].clone();
         other_platform.chip = "another-chip".into();
+        other_platform.target_dir = Some("target/firmware/other-platform".into());
         context
             .registry
             .platforms
@@ -138,7 +139,9 @@ mod tests {
             .registry
             .firmwares
             .insert("other-firmware".into(), other_firmware);
-        let other_cargo = context.cargo["test-firmware"].clone();
+        let mut other_cargo = context.cargo["test-firmware"].clone();
+        other_cargo.cargo.target_dir = context.root.join("target/firmware/other-platform");
+        other_cargo.cargo.target_dir_override = Some(other_cargo.cargo.target_dir.clone());
         context.cargo.insert("other-firmware".into(), other_cargo);
         for firmware in ["test-firmware", "other-firmware"] {
             for (profile, directory, suffix) in [
