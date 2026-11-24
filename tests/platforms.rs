@@ -47,6 +47,62 @@ fn info_requires_a_terminal_to_pick_even_when_a_firmware_is_saved() {
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn selection_operations_reject_a_state_directory_link_to_another_project() {
+    use std::os::unix::fs::symlink;
+
+    let source = Project::new("linked-state");
+    let owner = Project::new("state-owner");
+    for (fixture, firmware, profile) in [
+        (&source, "led-demo", "--dev"),
+        (&owner, "buzzer-demo", "--release"),
+    ] {
+        fixture.config(
+            "",
+            "target-dir = \"../images/led\"",
+            "target-dir = \"../images/buzzer\"",
+        );
+        succeed(
+            fixture
+                .command(&["select", firmware, profile])
+                .output()
+                .unwrap(),
+        );
+    }
+
+    let state = source.project.join(".polyfw-state");
+    let launch = source.project.join(".vscode/launch.json");
+    let owner_state = owner.project.join(".polyfw-state");
+    let owner_selection = owner_state.join("selected");
+    let owner_launch = owner.project.join(".vscode/launch.json");
+    let previous_launch = fs::read(&launch).unwrap();
+    let previous_owner_selection = fs::read(&owner_selection).unwrap();
+    let previous_owner_launch = fs::read(&owner_launch).unwrap();
+    fs::remove_dir_all(&state).unwrap();
+    symlink(&owner_state, &state).unwrap();
+
+    for args in [
+        ["info", "--json"].as_slice(),
+        &["select", "led-demo", "--dev"],
+        &["select", "--clear"],
+    ] {
+        let output = source.command(args).output().unwrap();
+        assert!(!output.status.success(), "{args:?} accepted a link");
+        assert!(output.stdout.is_empty(), "{args:?}");
+        let error = String::from_utf8_lossy(&output.stderr);
+        assert!(error.contains(&state.display().to_string()), "{error}");
+        assert!(error.contains("symbolic link"), "{error}");
+        assert_eq!(fs::read(&launch).unwrap(), previous_launch);
+        assert_eq!(
+            fs::read(&owner_selection).unwrap(),
+            previous_owner_selection
+        );
+        assert_eq!(fs::read(&owner_launch).unwrap(), previous_owner_launch);
+    }
+    assert_eq!(fs::read_link(state).unwrap(), owner_state);
+}
+
 impl Project {
     fn new(label: &str) -> Self {
         let root = std::env::temp_dir()

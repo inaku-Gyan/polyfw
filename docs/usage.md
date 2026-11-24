@@ -94,6 +94,8 @@ exclusive. Saving a selection retains only an explicitly supplied profile:
 
 A stale or malformed saved selection is an error. A one-time firmware override still reads that
 state; replace it with `plfw select led-demo` or remove it with `plfw select --clear`.
+Reading, saving and clearing selection require a real `.polyfw-state` directory when that path
+exists. If the path is a symbolic link, replace it with a directory inside the project root.
 Clearing works without Cargo and without parsing the old state. Concurrent saves and clears in the
 same project wait for the current [selection write](design.md#selection-and-editor-writes) to finish.
 A successful save remains even if the following build or hardware action fails.

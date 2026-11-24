@@ -1,6 +1,6 @@
 use std::fs;
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -9,8 +9,50 @@ use crate::{Error, ErrorKind, InternalResult, Profile, Result, files};
 
 use super::{FirmwareSummary, context::Context, vscode};
 
-pub(crate) const STATE_DIRECTORY: &str = ".polyfw-state";
+pub(super) const STATE_DIRECTORY: &str = ".polyfw-state";
 const SELECTION_FILE: &str = ".polyfw-state/selected";
+
+fn state_directory_exists(path: &Path) -> Result<bool> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.is_dir() => Ok(true),
+        Ok(metadata) if metadata.is_symlink() => Err(Error::new(
+            ErrorKind::InvalidStateDirectory,
+            format!(
+                "{} is a symbolic link. Use a directory in the project root.",
+                path.display()
+            ),
+        )),
+        Ok(_) => Err(Error::new(
+            ErrorKind::InvalidStateDirectory,
+            format!("{} must be a directory", path.display()),
+        )),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(Error::context(
+            ErrorKind::InvalidStateDirectory,
+            format!("could not inspect {}", path.display()),
+            error,
+        )),
+    }
+}
+
+pub(super) fn create_state_directory(path: &Path) -> Result<bool> {
+    if state_directory_exists(path)? {
+        return Ok(false);
+    }
+    match fs::create_dir(path) {
+        Ok(()) => Ok(true),
+        Err(error)
+            if error.kind() == io::ErrorKind::AlreadyExists && state_directory_exists(path)? =>
+        {
+            Ok(false)
+        }
+        Err(error) => Err(Error::context(
+            ErrorKind::SelectionWrite,
+            format!("could not create {}", path.display()),
+            error,
+        )),
+    }
+}
 
 /// How to choose a single firmware for an operation.
 #[derive(Clone, Copy, Debug)]
@@ -171,6 +213,9 @@ impl Context {
     }
 
     pub(crate) fn read_saved_selection(&self) -> Result<Option<SavedSelection>> {
+        if !state_directory_exists(&self.root.join(STATE_DIRECTORY))? {
+            return Ok(None);
+        }
         let path = self.selection_path();
         let value = match fs::read_to_string(&path) {
             Ok(value) => value,
@@ -222,6 +267,7 @@ impl Context {
         } else {
             None
         };
+        let _lock = self.lock_selection()?;
         self.write_selection(&saved, launch.as_deref())
             .map_err(|error| Error::new(ErrorKind::SelectionWrite, error))?;
         Ok(SavedSelection {
@@ -232,7 +278,6 @@ impl Context {
 
     fn write_selection(&self, saved: &SelectionFile, launch: Option<&str>) -> InternalResult<()> {
         let value = toml::to_string(saved)?;
-        let _lock = self.lock_selection()?;
         let path = self.selection_path();
         let Some(launch) = launch else {
             return files::replace(&path, value.as_bytes());
@@ -261,18 +306,19 @@ impl Context {
     }
 
     pub(crate) fn clear_selection(&self) -> Result<ClearReport> {
+        let managed_launch = self.registry.config.vscode.enabled;
         let mut paths = Vec::with_capacity(2);
-        if self.registry.config.vscode.enabled {
+        if managed_launch {
             paths.push(vscode::LAUNCH_FILE);
         }
         paths.push(SELECTION_FILE);
 
-        let missing = |path| {
-            fs::symlink_metadata(self.root.join(path))
-                .is_err_and(|error| error.kind() == io::ErrorKind::NotFound)
-        };
+        let launch_missing = !managed_launch
+            || fs::symlink_metadata(self.root.join(vscode::LAUNCH_FILE))
+                .is_err_and(|error| error.kind() == io::ErrorKind::NotFound);
         // Check the state directory last. Every writer creates it before modifying files.
-        let report = if paths.iter().all(|&path| missing(path)) && missing(STATE_DIRECTORY) {
+        let report = if launch_missing && !state_directory_exists(&self.root.join(STATE_DIRECTORY))?
+        {
             paths
                 .into_iter()
                 .map(|path| Removal {
@@ -281,9 +327,7 @@ impl Context {
                 })
                 .collect()
         } else {
-            let _lock = self
-                .lock_selection()
-                .map_err(|error| Error::new(ErrorKind::SelectionWrite, error))?;
+            let _lock = self.lock_selection()?;
             paths
                 .into_iter()
                 .map(|path| Removal {
@@ -295,11 +339,11 @@ impl Context {
         Ok(ClearReport { files: report })
     }
 
-    fn lock_selection(&self) -> InternalResult<fs::File> {
+    fn lock_selection(&self) -> Result<fs::File> {
         let directory = self.root.join(STATE_DIRECTORY);
+        create_state_directory(&directory)?;
         let path = directory.join("selection.lock");
         let lock = (|| -> io::Result<_> {
-            fs::create_dir_all(&directory)?;
             let file = fs::File::options()
                 .write(true)
                 .create(true)
@@ -309,7 +353,11 @@ impl Context {
             Ok(file)
         })();
         lock.map_err(|error| {
-            format!("could not lock selection at {}: {error}", path.display()).into()
+            Error::context(
+                ErrorKind::SelectionWrite,
+                format!("could not lock selection at {}", path.display()),
+                error,
+            )
         })
     }
 }

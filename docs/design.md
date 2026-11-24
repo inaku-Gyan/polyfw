@@ -175,6 +175,9 @@ inferred.
 Saved selection is project-local TOML containing a firmware and optional explicit profile. Absence,
 malformed state and a stale firmware are distinct cases. Profile inheritance and one-time overrides
 are resolved before orchestration; saving with no explicit profile clears the previous profile.
+Initialization and selection operations share a directory check that inspects `.polyfw-state`
+without following a link. Reads treat a missing directory as absent state. Writers create the
+directory when needed and verify its type if another writer creates it first.
 
 Selection writers for each project take a blocking exclusive lock on `.polyfw-state/selection.lock`.
 The lock covers launch and selection file changes, including rollback, and is released when the

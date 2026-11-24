@@ -6,7 +6,10 @@ use crate::config::REGISTRY_FILE;
 use crate::config::version::{CLI_VERSION, MIN_REQUIRED_CLI_VERSION};
 use crate::{BoxError, Error, InternalResult as Result};
 
-use super::{context::exact_root, selection::STATE_DIRECTORY};
+use super::{
+    context::exact_root,
+    selection::{STATE_DIRECTORY, create_state_directory},
+};
 
 /// Paths prepared by initialization, including any preexisting state ignore file.
 #[derive(Debug)]
@@ -62,17 +65,6 @@ fn run(root: &Path) -> Result<InitReport> {
         state_ignore: ignore_path,
         state_ignore_created: ignore_created,
     })
-}
-
-fn create_state_directory(path: &Path) -> Result<bool> {
-    match fs::symlink_metadata(path) {
-        Ok(metadata) if metadata.is_dir() => Ok(false),
-        Ok(_) => Err(format!("{} must be a directory", path.display()).into()),
-        Err(error) if error.kind() == ErrorKind::NotFound => fs::create_dir(path)
-            .map(|()| true)
-            .map_err(|error| format!("could not create {}: {error}", path.display()).into()),
-        Err(error) => Err(format!("could not inspect {}: {error}", path.display()).into()),
-    }
 }
 
 fn create_state_ignore(path: &Path) -> Result<Option<File>> {

@@ -19,6 +19,8 @@ pub enum ErrorKind {
     SelectionCancelled,
     SelectionPicker,
     InvalidSelection,
+    /// The project's saved-selection directory is inaccessible or has the wrong file type.
+    InvalidStateDirectory,
     StaleSelection,
     SelectionWrite,
     Cargo,
