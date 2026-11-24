@@ -188,6 +188,9 @@ build after `--select` must retain the newly saved firmware and profile. Cleanup
 real dev/release images, check package-wide deletion and preservation, then exercise full cleanup
 and rebuilding. See [Usage](usage.md#build-check-and-clean) for the cleanup contract.
 
+The Linux concurrent selection test observes the CLI waiting on the selection lock in
+`/proc/locks` before checking that both managed files retain their previous contents.
+
 Cargo fetches locked dependencies as needed using each command's effective Rust toolchain and
 inherits the caller's network settings. With dependencies cached and the target installed, set
 `CARGO_NET_OFFLINE=true` for an offline run. These tests are included in `just check`.

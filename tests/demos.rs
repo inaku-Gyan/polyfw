@@ -3,11 +3,8 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output, Stdio};
+use std::process::{Command, Output};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::mpsc;
-use std::thread;
-use std::time::Duration;
 
 mod support;
 
@@ -342,8 +339,15 @@ fn multi_firmware_example_switches_and_checks_only_the_selected_scope() {
     example.assert_test_fails("--all-firmwares", "unselected firmware test");
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 fn multi_firmware_example_waits_for_concurrent_selection_writes() {
+    use std::mem::DropGuard;
+    use std::os::unix::fs::MetadataExt;
+    use std::process::Stdio;
+    use std::thread;
+    use std::time::{Duration, Instant};
+
     let example = Example::new("multi-firmware");
     let config = example.root.join("polyfw.toml");
     let source = fs::read_to_string(&config).unwrap();
@@ -354,38 +358,65 @@ fn multi_firmware_example_waits_for_concurrent_selection_writes() {
     let launch = example.root.join(".vscode/launch.json");
     let lock_path = example.root.join(".polyfw-state/selection.lock");
     let run_while_locked = |args: &[&str]| {
-        let lock = fs::File::options()
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(&lock_path)
-            .unwrap();
+        let lock = fs::File::options().write(true).open(&lock_path).unwrap();
         lock.lock().unwrap();
+        let inode_suffix = format!(":{}", lock.metadata().unwrap().ino());
         let previous_selection = fs::read(&selection).unwrap();
         let previous_launch = fs::read(&launch).unwrap();
-        let child = example
+        let writer = example
             .command(args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
             .unwrap();
-
-        let (complete, completed) = mpsc::channel();
-        thread::scope(|scope| {
-            scope.spawn(move || complete.send(child.wait_with_output()).unwrap());
-            let early_result = completed.recv_timeout(Duration::from_secs(1));
-            let selection_while_locked = fs::read(&selection);
-            let launch_while_locked = fs::read(&launch);
-            drop(lock);
-
-            assert!(
-                matches!(early_result, Err(mpsc::RecvTimeoutError::Timeout)),
-                "{args:?} finished with the selection lock held: {early_result:?}"
-            );
-            assert_eq!(selection_while_locked.unwrap(), previous_selection);
-            assert_eq!(launch_while_locked.unwrap(), previous_launch);
-            succeeded(completed.recv().unwrap().unwrap());
+        let writer_pid = writer.id().to_string();
+        let mut writer = DropGuard::new(writer, |mut writer| {
+            let _ = writer.kill();
+            let _ = writer.wait();
         });
+
+        let deadline = Instant::now() + Duration::from_secs(30);
+        loop {
+            if writer.try_wait().unwrap().is_some() {
+                let output = DropGuard::dismiss(writer).wait_with_output().unwrap();
+                panic!(
+                    "{args:?} exited before waiting for {}: {output:?}",
+                    lock_path.display()
+                );
+            }
+            let locks = fs::read_to_string("/proc/locks").unwrap();
+            let waiting = locks.lines().any(|record| {
+                let mut fields = record.split_whitespace();
+                // A blocked entry has an arrow before the lock type, policy and mode.
+                fields.nth(1) == Some("->")
+                    && fields.nth(3) == Some(writer_pid.as_str())
+                    && fields
+                        .next()
+                        .is_some_and(|file| file.ends_with(&inode_suffix))
+            });
+            if waiting {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "{args:?} never reached {}",
+                lock_path.display()
+            );
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(fs::read(&selection).unwrap(), previous_selection);
+        assert_eq!(fs::read(&launch).unwrap(), previous_launch);
+        drop(lock);
+
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while writer.try_wait().unwrap().is_none() {
+            assert!(
+                Instant::now() < deadline,
+                "{args:?} did not finish after lock release"
+            );
+            thread::sleep(Duration::from_millis(10));
+        }
+        succeeded(DropGuard::dismiss(writer).wait_with_output().unwrap());
     };
 
     run_while_locked(&["select", "buzzer-demo", "--release"]);

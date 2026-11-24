@@ -1,10 +1,13 @@
 #![forbid(unsafe_code)]
 
+use std::cell::RefCell;
 use std::fs;
 use std::mem::DropGuard;
 use std::process::Command;
 
-use polyfw::{ErrorKind, FirmwareChoice, FirmwareTarget, Options, Profile, ProgressEvent, Project};
+use polyfw::{
+    ErrorKind, FirmwareChoice, FirmwareTarget, Options, Profile, ProgressEvent, Project, StageKind,
+};
 
 #[allow(dead_code)]
 mod support;
@@ -127,8 +130,8 @@ package = "polyfw-library-demo"
     assert_eq!(
         events,
         [
-            (polyfw::StageKind::Build, 1, None),
-            (polyfw::StageKind::Build, 1, Some(true))
+            (StageKind::Build, 1, None),
+            (StageKind::Build, 1, Some(true))
         ]
     );
     assert!(built.artifacts[0].exists);
@@ -158,27 +161,52 @@ package = "polyfw-library-demo"
         "compile_error!(\"fixture build failure\");",
     )
     .unwrap();
+    #[derive(Debug, PartialEq, Eq)]
+    enum Event {
+        SelectionSaved,
+        Started(StageKind),
+        Finished(StageKind, bool),
+    }
+    let events = RefCell::new(Vec::new());
     let mut saved = |selection: &polyfw::SavedSelection| {
         assert_eq!(project.saved_selection().unwrap().as_ref(), Some(selection));
+        events.borrow_mut().push(Event::SelectionSaved);
+    };
+    let mut progress = |event: ProgressEvent<'_>| {
+        let event = match event {
+            ProgressEvent::Started(stage) => Event::Started(stage.kind),
+            ProgressEvent::Finished { stage, success, .. } => Event::Finished(stage.kind, success),
+            _ => return,
+        };
+        events.borrow_mut().push(event);
     };
     let error = project
         .build(
             FirmwareTarget::One(FirmwareChoice::Save(Some("demo"))),
             Some(&profile),
-            Options::default().on_selection_saved(&mut saved),
+            Options::default()
+                .on_selection_saved(&mut saved)
+                .with_progress(&mut progress),
         )
         .unwrap_err();
     assert_eq!(error.kind(), ErrorKind::ProcessFailed);
+    assert_eq!(
+        events.into_inner(),
+        [
+            Event::SelectionSaved,
+            Event::Started(StageKind::Build),
+            Event::Finished(StageKind::Build, false),
+        ]
+    );
     let failed = error.failed_stage().unwrap();
     assert!(!failed.status.success());
     assert!(
         String::from_utf8_lossy(failed.stderr.as_deref().unwrap())
             .contains("fixture build failure")
     );
-    assert_eq!(
-        project.saved_selection().unwrap().unwrap().profile.as_ref(),
-        Some(&profile)
-    );
+    let saved = project.saved_selection().unwrap().unwrap();
+    assert_eq!(saved.firmware, "demo");
+    assert_eq!(saved.profile.as_ref(), Some(&profile));
 }
 
 #[cfg(target_os = "linux")]
