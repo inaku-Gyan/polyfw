@@ -142,6 +142,53 @@ fn succeed(output: Output) -> Output {
 }
 
 #[test]
+fn build_rejects_a_skipped_binary_even_when_an_old_executable_exists() {
+    let fixture = Project::new("required-features");
+    let manifest = fixture.workspace.join("buzzer-demo/Cargo.toml");
+    let source = fs::read_to_string(&manifest).unwrap();
+    let gated = format!("{source}required-features = [\"device\"]\n[features]\ndevice = []\n");
+    let rejected_build = |arguments: &[&str]| {
+        let output = fixture.command(arguments).output().unwrap();
+        assert!(!output.status.success());
+        assert!(output.stdout.is_empty());
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        for expected in [
+            "binary `demo-image` of firmware `buzzer-demo`",
+            "required Cargo features (device)",
+            "[fail] failed",
+        ] {
+            assert!(stderr.contains(expected), "{stderr}");
+        }
+        stderr
+    };
+
+    fs::write(&manifest, &gated).unwrap();
+    rejected_build(&["build", "buzzer-demo"]);
+    assert_eq!(
+        fixture.info()["firmwares"]["buzzer-demo"]["artifacts"]["dev"]["exists"],
+        false
+    );
+
+    fs::write(&manifest, format!("{gated}default = [\"device\"]\n")).unwrap();
+    for _ in 0..2 {
+        let output = succeed(fixture.command(&["build", "buzzer-demo"]).output().unwrap());
+        assert!(output.stdout.is_empty());
+    }
+    let info = fixture.info();
+    let artifact = Path::new(
+        info["firmwares"]["buzzer-demo"]["artifacts"]["dev"]["path"]
+            .as_str()
+            .unwrap(),
+    );
+    let previous = fs::read(artifact).unwrap();
+
+    fs::write(&manifest, gated).unwrap();
+    let stderr = rejected_build(&["build", "--all-firmwares"]);
+    assert!(!stderr.contains("[2/2]"), "{stderr}");
+    assert_eq!(fs::read(artifact).unwrap(), previous);
+}
+
+#[test]
 fn omitted_working_directories_use_the_configuration_directory_and_allow_firmware_overrides() {
     let fixture = Project::new("working-defaults");
     let source = fs::read_to_string(fixture.project.join("polyfw.toml")).unwrap();

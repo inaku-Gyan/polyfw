@@ -188,7 +188,7 @@ impl Project {
         let (id, profile) = context.choose_firmware(choice, profile, &mut options)?;
         let mut selection = context.selection(&id)?;
         selection.profile = profile;
-        Ok(Artifact::from_selection(&selection))
+        Ok(Artifact::from_selection(&selection, None))
     }
 
     /// Reads saved state, including a firmware ID that has since been removed.

@@ -41,7 +41,7 @@ impl Error {
         self.kind
     }
 
-    /// Returns the failed Cargo stage's exit status and any captured output.
+    /// Returns the failed stage's Cargo exit status and any captured output.
     pub fn failed_stage(&self) -> Option<&StageOutput> {
         self.stage.as_deref()
     }
@@ -65,12 +65,16 @@ impl Error {
     }
 
     pub(crate) fn process_failed(stage: StageOutput) -> Self {
-        let mut error = Self::new(
+        Self::new(
             ErrorKind::ProcessFailed,
             format!("{} failed with {}", stage.command, stage.status),
-        );
-        error.stage = Some(Box::new(stage));
-        error
+        )
+        .with_stage(stage)
+    }
+
+    pub(crate) fn with_stage(mut self, stage: StageOutput) -> Self {
+        self.stage = Some(Box::new(stage));
+        self
     }
 }
 

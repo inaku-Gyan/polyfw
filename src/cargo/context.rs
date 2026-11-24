@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use crate::InternalResult as Result;
 use crate::config::{REGISTRY_FILE, model::Registry};
 
-use super::model::{CargoContext, FirmwareCargo, Metadata, Selection};
+use super::model::{CargoContext, FirmwareCargo, Metadata, ResolvedBin, Selection};
 use super::runner;
 
 pub(crate) fn resolve(root: &Path, registry: &Registry) -> Result<BTreeMap<String, FirmwareCargo>> {
@@ -78,15 +78,34 @@ pub(crate) fn resolve(root: &Path, registry: &Registry) -> Result<BTreeMap<Strin
             .targets
             .iter()
             .filter(|target| target.kind.iter().any(|kind| kind == "bin"))
-            .map(|target| target.name.as_str())
             .collect::<Vec<_>>();
         let bin = match firmware.bin.as_deref() {
-            Some(bin) if bins.contains(&bin) => bin.to_owned(),
-            Some(bin) => return Err(format!("firmware {id} package {} has no binary target named {bin}", firmware.package).into()),
+            Some(bin) => bins
+                .iter()
+                .copied()
+                .find(|target| target.name == bin)
+                .ok_or_else(|| {
+                    format!(
+                        "firmware {id} package {} has no binary target named {bin}",
+                        firmware.package
+                    )
+                })?,
             None => match bins.as_slice() {
-                [bin] => (*bin).to_owned(),
-                [] => return Err(format!("firmware {id} package {} has no binary targets", firmware.package).into()),
-                _ => return Err(format!("firmware {id} package {} has multiple binary targets: {}; set bin in {REGISTRY_FILE}", firmware.package, bins.join(", ")).into()),
+                [bin] => *bin,
+                [] => {
+                    return Err(format!(
+                        "firmware {id} package {} has no binary targets",
+                        firmware.package
+                    )
+                    .into());
+                }
+                _ => {
+                    let names = bins
+                        .iter()
+                        .map(|target| target.name.as_str())
+                        .collect::<Vec<_>>();
+                    return Err(format!("firmware {id} package {} has multiple binary targets: {}; set bin in {REGISTRY_FILE}", firmware.package, names.join(", ")).into());
+                }
             },
         };
         cargo.workspace = canonical(Path::new(&data.workspace_root))?;
@@ -99,7 +118,11 @@ pub(crate) fn resolve(root: &Path, registry: &Registry) -> Result<BTreeMap<Strin
             id.clone(),
             FirmwareCargo {
                 cargo,
-                bin,
+                bin: ResolvedBin {
+                    name: bin.name.clone(),
+                    package_id: package.id.clone(),
+                    required_features: bin.required_features.clone(),
+                },
                 manifest_path: package.manifest_path.clone(),
             },
         );

@@ -193,6 +193,11 @@ Builds run from the effective `working-dir` with explicit Platform `--target` an
 `--bin`; otherwise Cargo builds the package's default targets. Every firmware is built separately,
 including with `--all-firmwares`.
 
+A build succeeds when Cargo exits successfully and reports the registered binary's executable
+for that invocation. Cargo can report a cached executable. If Cargo skips the binary because its
+required features are inactive, `plfw build` reports the firmware and its feature requirements,
+even if an executable from an earlier build still exists.
+
 Checks cover the firmware package and its configured, reachable local dependencies:
 
 - `fmt` runs `cargo fmt` and **rewrites source files**.

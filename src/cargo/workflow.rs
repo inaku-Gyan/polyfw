@@ -1,12 +1,17 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::config::model::Registry;
-use crate::process::Invocation;
-use crate::{CleanScope, Error, ErrorKind, Result, StageKind, StageTarget};
+use serde::Deserialize;
 
-use super::model::{FirmwareCargo, Selection};
+use crate::config::model::Registry;
+use crate::process::{self, Invocation};
+use crate::{
+    CleanScope, Error, ErrorKind, OutputMode, ProgressEvent, Result, RunReport, StageKind,
+    StageTarget,
+};
+
+use super::model::{FirmwareCargo, MetadataTarget, Selection};
 use super::runner;
 use super::scope::{self, PackageScope, WorkspaceScope};
 
@@ -23,7 +28,30 @@ pub enum Check {
     Verify,
 }
 
-pub(crate) fn build(selections: &[Selection]) -> Vec<Invocation> {
+pub(crate) fn build(
+    selections: &[Selection],
+    output: OutputMode,
+    progress: Option<&mut dyn FnMut(ProgressEvent<'_>)>,
+) -> Result<(RunReport, Vec<PathBuf>)> {
+    let mut executables = Vec::with_capacity(selections.len());
+    let report = process::run(
+        build_stages(selections),
+        output,
+        progress,
+        Some(&mut |index, stage| {
+            let selection = &selections[index];
+            let stdout = stage.stdout.as_mut().expect("build stdout is piped");
+            let executable = executable_from_output(selection, stdout);
+            if stage.status.success() {
+                executables.push(executable.ok_or_else(|| missing_executable(selection))?);
+            }
+            Ok(())
+        }),
+    )?;
+    Ok((report, executables))
+}
+
+pub(crate) fn build_stages(selections: &[Selection]) -> Vec<Invocation> {
     selections
         .iter()
         .map(|selection| {
@@ -37,6 +65,70 @@ pub(crate) fn build(selections: &[Selection]) -> Vec<Invocation> {
             invocation
         })
         .collect()
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "reason", rename_all = "kebab-case")]
+enum BuildMessage {
+    CompilerArtifact {
+        package_id: String,
+        target: MetadataTarget,
+        executable: Option<PathBuf>,
+    },
+    CompilerMessage {
+        message: BuildDiagnostic,
+    },
+    BuildScriptExecuted,
+    BuildFinished,
+}
+
+#[derive(Deserialize)]
+struct BuildDiagnostic {
+    rendered: Option<String>,
+}
+
+fn executable_from_output(selection: &Selection, stdout: &mut Vec<u8>) -> Option<PathBuf> {
+    let bin = &selection.resolved_bin;
+    let mut executable = None;
+    let mut visible_stdout = Vec::new();
+    for line in stdout.split_inclusive(|byte| *byte == b'\n') {
+        match serde_json::from_slice(line) {
+            Ok(BuildMessage::CompilerArtifact {
+                package_id,
+                target,
+                executable: Some(path),
+            }) if package_id == bin.package_id
+                && target.name == bin.name
+                && target.kind.iter().any(|kind| kind == "bin") =>
+            {
+                executable = Some(path);
+            }
+            Ok(BuildMessage::CompilerMessage { message }) => {
+                if let Some(rendered) = message.rendered {
+                    visible_stdout.extend(rendered.bytes());
+                }
+            }
+            Ok(_) => {}
+            Err(_) => visible_stdout.extend_from_slice(line),
+        }
+    }
+    *stdout = visible_stdout;
+    executable
+}
+
+fn missing_executable(selection: &Selection) -> Error {
+    let bin = &selection.resolved_bin;
+    let mut message = format!(
+        "Cargo did not report an executable for binary `{}` of firmware `{}`",
+        bin.name, selection.id
+    );
+    if !bin.required_features.is_empty() {
+        message.push_str(&format!(
+            ". Enable the required Cargo features ({})",
+            bin.required_features.join(", ")
+        ));
+    }
+    Error::new(ErrorKind::Cargo, message)
 }
 
 pub(crate) fn clean(
@@ -129,7 +221,7 @@ pub(crate) fn build_command(selection: &Selection) -> Command {
     if let Some(bin) = &selection.firmware.bin {
         command.arg("--bin").arg(bin);
     }
-    command.arg("--locked");
+    command.args(["--locked", "--message-format=json-render-diagnostics"]);
     if let Some(profile) = &selection.profile {
         command.arg("--profile").arg(profile.name());
     }

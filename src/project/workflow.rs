@@ -4,7 +4,7 @@ use crate::{Check, Profile, Result, RunReport, process};
 use super::{Artifact, BuildReport, Context, FirmwareTarget, Options, Project};
 
 impl Project {
-    /// Builds the requested firmware and reports its expected artifacts.
+    /// Builds the requested firmware and reports the executables confirmed by Cargo.
     pub fn build(
         &self,
         target: FirmwareTarget<'_>,
@@ -13,12 +13,13 @@ impl Project {
     ) -> Result<BuildReport> {
         let context = self.context.resolved()?;
         let selections = context.targets(target, profile, &mut options)?;
-        let execution = process::run(
-            cargo_workflow::build(&selections),
-            options.output,
-            options.progress,
-        )?;
-        let artifacts = selections.iter().map(Artifact::from_selection).collect();
+        let (execution, executables) =
+            cargo_workflow::build(&selections, options.output, options.progress)?;
+        let artifacts = selections
+            .iter()
+            .zip(executables)
+            .map(|(selection, executable)| Artifact::from_selection(selection, Some(executable)))
+            .collect();
         Ok(BuildReport {
             artifacts,
             execution,
@@ -35,7 +36,7 @@ impl Project {
             &selections,
             matches!(target, FirmwareTarget::All),
         );
-        process::run(stages, options.output, options.progress)
+        process::run(stages, options.output, options.progress, None)
     }
 
     /// Runs a formatting, lint, test or verification workflow over the requested scope.
@@ -53,7 +54,7 @@ impl Project {
             &selections,
             check,
         )?;
-        process::run(stages, options.output, options.progress)
+        process::run(stages, options.output, options.progress, None)
     }
 }
 
@@ -94,7 +95,7 @@ mod tests {
     use std::process::Command;
 
     use super::*;
-    use crate::cargo::model::{CargoContext, FirmwareCargo};
+    use crate::cargo::model::{CargoContext, FirmwareCargo, ResolvedBin};
     use crate::cargo::runner;
     use crate::cargo::scope::{self, PackageScope, WorkspaceScope};
     use crate::cargo::workflow::{
@@ -116,7 +117,7 @@ mod tests {
     }
 
     fn build(selections: &[Selection]) {
-        process::run(cargo_workflow::build(selections), OutputMode::Inherit, None).unwrap();
+        cargo_workflow::build(selections, OutputMode::Inherit, None).unwrap();
     }
 
     #[test]
@@ -124,7 +125,7 @@ mod tests {
         let mut context = test_context(test_root("vscode profiles with spaces"));
         let firmware = context.registry.firmwares.get_mut("test-firmware").unwrap();
         firmware.bin = Some("robot-image".into());
-        context.cargo.get_mut("test-firmware").unwrap().bin = "robot-image".into();
+        context.cargo.get_mut("test-firmware").unwrap().bin.name = "robot-image".into();
         let mut other_platform = context.registry.platforms["test-platform"].clone();
         other_platform.chip = "another-chip".into();
         context
@@ -343,20 +344,20 @@ mod tests {
                     &selections,
                     false,
                 )),
-                "build" => Ok(cargo_workflow::build(&selections)),
+                "build" => Ok(cargo_workflow::build_stages(&selections)),
                 "fmt" => cargo_workflow::check(&root, &[], &selections, Check::Format),
                 "lint" => cargo_workflow::check(&root, &[], &selections, Check::Lint),
                 "test" => cargo_workflow::check(&root, &[], &selections, Check::Test),
                 "verify" => cargo_workflow::check(&root, &[], &selections, Check::Verify),
                 "image" => {
-                    assert!(!Artifact::from_selection(&selections[0]).exists);
+                    assert!(!Artifact::from_selection(&selections[0], None).exists);
                     Ok(vec![])
                 }
                 _ => unreachable!(),
             };
             if command != "image" {
                 assert!(
-                    plan.and_then(|stages| process::run(stages, OutputMode::Capture, None))
+                    plan.and_then(|stages| process::run(stages, OutputMode::Capture, None, None))
                         .is_err()
                 );
             }
@@ -484,6 +485,7 @@ mod tests {
                     "-p",
                     "test-firmware",
                     "--locked",
+                    "--message-format=json-render-diagnostics",
                 ];
                 if let Some(profile) = expected {
                     expected_args.extend(["--profile", profile]);
@@ -551,8 +553,8 @@ mod tests {
         let mut selection = context.selection("test-firmware").unwrap();
         selection.profile = Some("bench-debug".parse().unwrap());
         build(std::slice::from_ref(&selection));
-        let elf =
-            runner::firmware_elf_path(&selection).with_extension(std::env::consts::EXE_EXTENSION);
+        let elf = runner::firmware_elf_path(&selection, None)
+            .with_extension(std::env::consts::EXE_EXTENSION);
         assert!(elf.is_file(), "{}", elf.display());
         assert!(
             !context
@@ -731,7 +733,7 @@ mod tests {
             let mut context = test_context(test_root("build-bin-argument"));
             let firmware = context.registry.firmwares.get_mut("test-firmware").unwrap();
             firmware.bin = bin.map(str::to_owned);
-            context.cargo.get_mut("test-firmware").unwrap().bin =
+            context.cargo.get_mut("test-firmware").unwrap().bin.name =
                 bin.unwrap_or("robot-image").into();
             let selection = context.selection("test-firmware").unwrap();
             let command = build_command(&selection);
@@ -745,7 +747,7 @@ mod tests {
             if let Some(bin) = bin {
                 expected.extend(["--bin", bin]);
             }
-            expected.push("--locked");
+            expected.extend(["--locked", "--message-format=json-render-diagnostics"]);
             assert_eq!(
                 command.get_args().collect::<Vec<_>>(),
                 expected.iter().map(OsStr::new).collect::<Vec<_>>()
@@ -801,7 +803,7 @@ mod tests {
             let context = Context::load(context.root).unwrap();
 
             let selection = context.selection("test-firmware").unwrap();
-            assert_eq!(selection.resolved_bin, name);
+            assert_eq!(selection.resolved_bin.name, name);
             assert_eq!(selection.firmware.bin.as_deref(), bin);
             build(&[selection]);
             assert!(
@@ -948,7 +950,10 @@ mod tests {
             cargo: BTreeMap::from([(
                 "test-firmware".into(),
                 FirmwareCargo {
-                    bin: "test-firmware".into(),
+                    bin: ResolvedBin {
+                        name: "test-firmware".into(),
+                        ..ResolvedBin::default()
+                    },
                     cargo: CargoContext::fixture(&root, "test-platform"),
                     manifest_path: root.join("platform/test/firmware/Cargo.toml"),
                 },

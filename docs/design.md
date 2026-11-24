@@ -40,10 +40,11 @@ inheritance or persistence. When the choice requires input, the calling program 
 picker through `Options`. Use `saved_selection`, `save_selection` and `clear_selection` to work
 with project-local selection state directly.
 
-Cargo operations are synchronous. The default captures the child's stdout and stderr in the
-stage report or failed-stage error. Inherited output lets the child use the caller's terminal.
-Callbacks receive structured progress on the calling thread. An artifact reports the expected
-ELF path and whether a file was present when checked.
+Cargo operations are synchronous. The default captures output in the stage report or
+failed-stage error. Inherited output lets the child use the caller's terminal. The build runner
+consumes Cargo's structured messages from stdout and keeps the human-readable diagnostics
+available in either mode. Callbacks receive structured progress on the calling thread. An
+artifact reports its path and whether a file was present when checked.
 
 ## Load only the context a command needs
 
@@ -70,8 +71,9 @@ does not parse old state. Reset also uses configuration alone unless saving sele
 an editor launch file. Dependency graphs are loaded for checks and detailed info.
 
 Cargo validation requires a library and at least one binary, counting feature-gated binaries
-independently of default-run. An omitted bin is resolved for artifact lookup while remaining absent
-from build arguments. Same-named binaries follow Cargo's native output behavior.
+independently of default-run. An omitted bin is resolved for artifact lookup and build verification
+while remaining absent from build arguments. Same-named binaries follow Cargo's native output
+behavior.
 
 ## Configuration compatibility
 
@@ -140,15 +142,20 @@ single image. verify shares the scope, executes format-check, lint, then tests, 
 
 ## Artifact identity
 
-`cargo::runner::firmware_elf_path` is the single public-layout resolver for info, hardware and editor
-consumers: effective target-dir / resolved-target / profile-directory / binary. Windows host
-executables have the native .exe suffix. profile owns dev/test => debug, release/bench => release,
-and custom-profile names. Cargo's private build-dir layout is never inspected.
+`cargo::runner::firmware_elf_path` resolves the public artifact path for reports, hardware and
+editor consumers. Without a Cargo report it uses the effective target directory, resolved target
+subdirectory, profile directory and binary name. Built-in Windows targets use the `.exe` suffix.
+The `profile` module maps dev and test to `debug`, release and bench to `release`, and custom
+profiles to their names.
 
-Builds operate once per selected firmware. Compatible intermediates can share build-dir while
-separate target-dir values preserve independent final images. Shared public filenames can be
-replaced; no extra collision rejection or ELF-copy mechanism is introduced. Cargo fingerprints,
-not Platform identity alone, decide reuse.
+Each build stage checks Cargo's `compiler-artifact` messages for an executable belonging to the
+selected package and binary. The build report uses the path from that stage, including when Cargo
+reuses a cached executable. Artifact verification completes before reporting stage success. See
+[build usage](usage.md#build-check-and-clean) for the success contract.
+
+Compatible intermediates can share build-dir while separate target-dir values preserve independent
+final images. Cargo can replace a shared public filename in a later build. Cargo fingerprints
+decide reuse.
 
 Single-firmware clean delegates package cleanup with firmware and host targets using Cargo's
 default profile rules. All-firmware clean deduplicates directory contexts and delegates full

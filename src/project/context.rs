@@ -146,7 +146,7 @@ mod tests {
     use super::*;
     use crate::Profile;
     use crate::cargo::context::unique_contexts;
-    use crate::cargo::model::CargoContext;
+    use crate::cargo::model::{CargoContext, ResolvedBin};
     use crate::config::model::{Config, Firmware, Platform};
     use crate::config::version::CLI_VERSION;
     use crate::configuration_schema as schema_source;
@@ -268,7 +268,11 @@ mod tests {
         fs::write(root.join(REGISTRY_FILE), source).unwrap();
         let context = Context::load(root.clone()).unwrap();
         assert_eq!(
-            context.selection("test-firmware").unwrap().resolved_bin,
+            context
+                .selection("test-firmware")
+                .unwrap()
+                .resolved_bin
+                .name,
             "test-firmware"
         );
         assert!(context.registry.firmwares["test-firmware"].bin.is_none());
@@ -281,7 +285,11 @@ mod tests {
         .unwrap();
         let context = Context::load(root.clone()).unwrap();
         assert_eq!(
-            context.selection("test-firmware").unwrap().resolved_bin,
+            context
+                .selection("test-firmware")
+                .unwrap()
+                .resolved_bin
+                .name,
             "robot-image"
         );
 
@@ -299,8 +307,8 @@ mod tests {
         let context = Context::load(root.clone()).unwrap();
         let selection = context.selection("test-firmware").unwrap();
         assert!(selection.firmware.bin.is_none());
-        assert_eq!(selection.resolved_bin, "robot-image");
-        let elf = crate::cargo::runner::firmware_elf_path(&selection);
+        assert_eq!(selection.resolved_bin.name, "robot-image");
+        let elf = crate::cargo::runner::firmware_elf_path(&selection, None);
         assert_eq!(
             elf,
             root.join("target/firmware/test/thumbv7em-none-eabihf/debug/robot-image")
@@ -417,7 +425,7 @@ mod tests {
             assert_eq!(context.registry.firmwares.len(), 3);
             for firmware in context.registry.firmwares.keys() {
                 assert_eq!(
-                    context.selection(firmware).unwrap().resolved_bin,
+                    context.selection(firmware).unwrap().resolved_bin.name,
                     "shared-image"
                 );
             }
@@ -696,7 +704,10 @@ mod tests {
             id: id.into(),
             profile: None,
             cargo: CargoContext::default(),
-            resolved_bin: id.into(),
+            resolved_bin: ResolvedBin {
+                name: id.into(),
+                ..ResolvedBin::default()
+            },
             firmware: Firmware {
                 description: Some(id.into()),
                 platform: "dm-mc02".into(),
@@ -723,7 +734,10 @@ mod tests {
             cargo: BTreeMap::from([(
                 "test-firmware".into(),
                 FirmwareCargo {
-                    bin: "test-firmware".into(),
+                    bin: ResolvedBin {
+                        name: "test-firmware".into(),
+                        ..ResolvedBin::default()
+                    },
                     cargo: CargoContext::fixture(&root, "test-platform"),
                     manifest_path: root.join("platform/test/firmware/Cargo.toml"),
                 },

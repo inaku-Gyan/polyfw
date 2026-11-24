@@ -157,11 +157,15 @@ pub(crate) fn resolve_target(
     Ok(target.to_owned())
 }
 
-pub(crate) fn firmware_elf_path(selection: &Selection) -> PathBuf {
+pub(crate) fn firmware_elf_path(selection: &Selection, executable: Option<PathBuf>) -> PathBuf {
+    if let Some(executable) = executable {
+        return executable;
+    }
+    let name = &selection.resolved_bin.name;
     let bin = if selection.cargo.target.contains("-windows-") {
-        format!("{}.exe", selection.resolved_bin)
+        format!("{name}.exe")
     } else {
-        selection.resolved_bin.clone()
+        name.clone()
     };
     selection
         .cargo
@@ -181,6 +185,7 @@ mod tests {
     use std::fs;
 
     use super::*;
+    use crate::cargo::model::ResolvedBin;
     use crate::config::model::{Firmware, Platform};
 
     #[test]
@@ -227,7 +232,10 @@ mod tests {
             id: "controller".into(),
             profile: None,
             cargo: CargoContext::fixture(root, "firmware-family"),
-            resolved_bin: "firmware-package".into(),
+            resolved_bin: ResolvedBin {
+                name: "firmware-package".into(),
+                ..ResolvedBin::default()
+            },
             firmware: Firmware {
                 description: Some("test firmware".into()),
                 platform: "firmware-family".into(),
@@ -244,18 +252,18 @@ mod tests {
         };
         let target_dir = root.join("target/firmware/firmware-family/thumbv7em-none-eabihf");
         assert_eq!(
-            firmware_elf_path(&selection),
+            firmware_elf_path(&selection, None),
             target_dir.join("debug/firmware-package")
         );
-        selection.resolved_bin = "robot-image".into();
+        selection.resolved_bin.name = "robot-image".into();
         selection.profile = Some("release".parse().unwrap());
         assert_eq!(
-            firmware_elf_path(&selection),
+            firmware_elf_path(&selection, None),
             target_dir.join("release/robot-image")
         );
         selection.profile = Some("dev".parse().unwrap());
         assert_eq!(
-            firmware_elf_path(&selection),
+            firmware_elf_path(&selection, None),
             target_dir.join("debug/robot-image")
         );
     }

@@ -79,6 +79,15 @@ pub(crate) enum DependencyKind {
 pub(crate) struct MetadataTarget {
     pub(crate) name: String,
     pub(crate) kind: Vec<String>,
+    #[serde(default, rename = "required-features")]
+    pub(crate) required_features: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub(crate) struct ResolvedBin {
+    pub(crate) name: String,
+    pub(crate) package_id: String,
+    pub(crate) required_features: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -88,13 +97,13 @@ pub(crate) struct Selection {
     pub(crate) platform: Platform,
     pub(crate) profile: Option<Profile>,
     pub(crate) cargo: CargoContext,
-    pub(crate) resolved_bin: String,
+    pub(crate) resolved_bin: ResolvedBin,
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct FirmwareCargo {
     pub(crate) cargo: CargoContext,
-    pub(crate) bin: String,
+    pub(crate) bin: ResolvedBin,
     pub(crate) manifest_path: PathBuf,
 }
 

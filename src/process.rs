@@ -1,5 +1,6 @@
+use std::io::{self, Write};
 use std::path::PathBuf;
-use std::process::{Command, ExitStatus};
+use std::process::{Command, ExitStatus, Stdio};
 use std::time::{Duration, Instant};
 
 use crate::{Error, ErrorKind, Profile, Result};
@@ -7,10 +8,10 @@ use crate::{Error, ErrorKind, Profile, Result};
 /// How a Cargo operation handles its child processes' terminal streams.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum OutputMode {
-    /// Buffer stdout and stderr for the result, with child stdin closed.
+    /// Buffer user-facing stdout and stderr for the result, with child stdin closed.
     #[default]
     Capture,
-    /// Pass the caller's stdin, stdout and stderr through to each child.
+    /// Forward child output to the caller and let the child use the caller's stdin.
     Inherit,
 }
 
@@ -125,10 +126,13 @@ fn render_command(command: &Command) -> String {
         .join(" ")
 }
 
+type OutputInspector<'a> = dyn FnMut(usize, &mut StageOutput) -> Result<()> + 'a;
+
 pub(crate) fn run(
     invocations: Vec<Invocation>,
     mode: OutputMode,
     mut progress: Option<&mut dyn FnMut(ProgressEvent<'_>)>,
+    mut inspect: Option<&mut OutputInspector<'_>>,
 ) -> Result<RunReport> {
     let total = invocations.len();
     let mut stages = Vec::with_capacity(total);
@@ -150,36 +154,62 @@ pub(crate) fn run(
             observer(ProgressEvent::Started(stage));
         }
         let started = Instant::now();
-        let output = match mode {
-            OutputMode::Capture => invocation
+        let output = match (mode, inspect.is_some()) {
+            (OutputMode::Capture, _) => invocation
                 .command
                 .output()
                 .map(|output| (output.status, Some(output.stdout), Some(output.stderr))),
-            OutputMode::Inherit => invocation
+            (OutputMode::Inherit, true) => invocation
+                .command
+                .stdin(Stdio::inherit())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::inherit())
+                .output()
+                .map(|output| (output.status, Some(output.stdout), None)),
+            (OutputMode::Inherit, false) => invocation
                 .command
                 .status()
                 .map(|status| (status, None, None)),
         };
+        let output = output
+            .map_err(|error| Error::new(ErrorKind::ProcessLaunch, error))
+            .and_then(|(status, stdout, stderr)| {
+                let mut output = StageOutput {
+                    kind: invocation.kind,
+                    command: rendered.clone(),
+                    status,
+                    stdout,
+                    stderr,
+                };
+                let inspection = inspect
+                    .as_mut()
+                    .map_or(Ok(()), |inspect| inspect(index, &mut output));
+                let forwarding = if mode == OutputMode::Inherit
+                    && let Some(stdout) = output.stdout.take()
+                {
+                    io::stdout()
+                        .lock()
+                        .write_all(&stdout)
+                        .map_err(|error| Error::new(ErrorKind::Cargo, error))
+                } else {
+                    Ok(())
+                };
+                if !status.success() {
+                    return Err(Error::process_failed(output));
+                }
+                match inspection.and(forwarding) {
+                    Ok(()) => Ok(output),
+                    Err(error) => Err(error.with_stage(output)),
+                }
+            });
         if let Some(observer) = progress.as_deref_mut() {
             observer(ProgressEvent::Finished {
                 stage,
                 elapsed: started.elapsed(),
-                success: output.as_ref().is_ok_and(|(status, _, _)| status.success()),
+                success: output.is_ok(),
             });
         }
-        let (status, stdout, stderr) =
-            output.map_err(|error| Error::new(ErrorKind::ProcessLaunch, error))?;
-        let output = StageOutput {
-            kind: invocation.kind,
-            command: rendered,
-            status,
-            stdout,
-            stderr,
-        };
-        if !status.success() {
-            return Err(Error::process_failed(output));
-        }
-        stages.push(output);
+        stages.push(output?);
     }
     Ok(RunReport { stages })
 }
@@ -204,7 +234,7 @@ mod tests {
                     finished = Some(success);
                 }
             };
-            let error = run(vec![invocation], mode, Some(&mut progress)).unwrap_err();
+            let error = run(vec![invocation], mode, Some(&mut progress), None).unwrap_err();
             assert_eq!(finished, Some(false));
             assert_eq!(error.kind(), ErrorKind::ProcessLaunch);
             let source = error.source().unwrap().downcast_ref::<io::Error>().unwrap();

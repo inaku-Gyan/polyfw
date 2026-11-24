@@ -352,7 +352,7 @@ mod tests {
             &selections,
             check,
         )?;
-        process::run(stages, OutputMode::Inherit, None)?;
+        process::run(stages, OutputMode::Inherit, None, None)?;
         Ok(())
     }
 
@@ -523,8 +523,8 @@ mod tests {
         let context = fixture("shared-package");
         let first = context.selection("one").unwrap();
         let second = context.selection("one-alternate").unwrap();
-        assert_eq!(first.resolved_bin, "firmware-a");
-        assert_eq!(second.resolved_bin, "firmware-a-alternate");
+        assert_eq!(first.resolved_bin.name, "firmware-a");
+        assert_eq!(second.resolved_bin.name, "firmware-a-alternate");
         assert_ne!(first.id, second.id);
         let expected = resolve(&context, std::slice::from_ref(&first)).unwrap();
         let expected_packages = expected[0]

@@ -77,7 +77,7 @@ pub struct DependencyInfo {
     pub embedded: bool,
 }
 
-/// Expected ELF location and a snapshot of whether a file is present there.
+/// ELF location and a snapshot of whether a file is present there.
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct Artifact {
@@ -89,8 +89,8 @@ pub struct Artifact {
 }
 
 impl Artifact {
-    pub(crate) fn from_selection(selection: &Selection) -> Self {
-        let path = firmware_elf_path(selection);
+    pub(crate) fn from_selection(selection: &Selection, executable: Option<PathBuf>) -> Self {
+        let path = firmware_elf_path(selection, executable);
         Self {
             firmware: selection.id.clone(),
             profile: selection.profile.clone(),
@@ -160,7 +160,7 @@ impl ProjectInfo {
                 .iter()
                 .map(|profile| {
                     selection.profile = Some(profile.clone());
-                    Artifact::from_selection(&selection)
+                    Artifact::from_selection(&selection, None)
                 })
                 .collect();
             firmwares.insert(
@@ -169,7 +169,7 @@ impl ProjectInfo {
                     description: selection.firmware.description,
                     platform: selection.firmware.platform,
                     package: selection.firmware.package,
-                    bin: selection.resolved_bin,
+                    bin: selection.resolved_bin.name,
                     manifest_path,
                     workspace: selection.cargo.workspace,
                     working_dir: selection.cargo.working_dir,
