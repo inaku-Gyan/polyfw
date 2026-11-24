@@ -34,7 +34,6 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@v2
         with:
           cache: false
-          components: llvm-tools
           target: thumbv7em-none-eabihf
           build-warnings: warn
 

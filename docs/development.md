@@ -6,9 +6,9 @@ This guide is for changes to polyfw itself. To integrate an existing firmware pr
 
 ## Set up a checkout
 
-Use rustup with the repository's `rust-toolchain.toml`, plus `just`. The pin includes rustfmt and
-Clippy. Install the embedded target used by Cargo-running test fixtures, even though polyfw is a
-host application:
+Use rustup with the repository's `rust-toolchain.toml`, plus `just`. The pin includes rustfmt,
+Clippy and the LLVM tools for coverage. Install the embedded target used by Cargo-running test
+fixtures and run the checks.
 
 ```sh
 rustup target add thumbv7em-none-eabihf
@@ -139,10 +139,9 @@ fixtures establish generated arguments/settings, not physical device behavior.
 
 ## Measure test coverage
 
-After setting up a checkout, install the pinned toolchain's LLVM tools and the coverage subcommand.
+After setting up a checkout, install the coverage subcommand.
 
 ```sh
-rustup component add llvm-tools
 cargo install cargo-llvm-cov --version 0.9.2 --locked
 just coverage
 ```
