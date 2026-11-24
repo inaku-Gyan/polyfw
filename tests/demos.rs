@@ -307,10 +307,7 @@ fn multi_firmware_example_switches_and_checks_only_the_selected_scope() {
     for id in ["led-demo", "buzzer-demo"] {
         assert!(report["firmwares"][id].get("local_dependencies").is_none());
         let details = example.json(&["info", "--firmware", id, "--json", "2"]);
-        assert_eq!(
-            details,
-            example.json(&["info", "--json=latest", "--firmware", id])
-        );
+        assert_eq!(details, example.json(&["info", "--json", "--firmware", id]));
         assert_eq!(
             details["firmwares"][id]["local_dependencies"],
             serde_json::json!([{

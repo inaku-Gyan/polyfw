@@ -122,15 +122,16 @@ fails. An ELF marked `present` may be older than the source or differ from the r
 
 ### JSON format versions
 
-Pass `--json=2` or `--json 2` to pin format version 2. `--json=latest`, `--json latest` and bare
-`--json` select the highest format version supported by the running binary, currently version 2.
-An unsupported version fails argument parsing before project discovery, and the error lists the
-supported values.
+Bare `--json` uses format 2, including in releases that add newer formats. Pass `--json=2` to
+select format 2 explicitly. A space between `--json` and the version is also accepted.
+An unsupported value fails argument parsing before project discovery, and the error lists the
+supported versions.
 
 Format versions are independent of polyfw releases. Once released, each numbered version fixes the
 JSON fields, types, omission rules and meanings for both views. Contract changes, including new
-fields, use a new format version. New formats ship alongside existing numbered versions. The
-release notes announce any planned removals in advance. JSON object key order and whitespace may vary.
+fields, use a new format version. New formats ship alongside existing numbered versions. Changing
+the default format is a breaking change. Release notes announce planned removals and default
+changes in advance and provide migration instructions. JSON object key order and whitespace may vary.
 
 Format 2 includes these fields.
 

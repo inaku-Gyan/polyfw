@@ -58,6 +58,8 @@ fn info_rejects_unsupported_json_versions_before_opening_a_project() {
         (vec!["--json", "1"], "1"),
         (vec!["--json=9999"], "9999"),
         (vec!["--json", "9999"], "9999"),
+        (vec!["--json=latest"], "latest"),
+        (vec!["--json", "latest"], "latest"),
     ] {
         let output = fixture.command().arg("info").args(args).output().unwrap();
         assert_eq!(output.status.code(), Some(2));
@@ -67,7 +69,7 @@ fn info_rejects_unsupported_json_versions_before_opening_a_project() {
             stderr.contains(&format!("invalid value '{version}'")),
             "{stderr}"
         );
-        assert!(stderr.contains("possible values: 2, latest"), "{stderr}");
+        assert!(stderr.contains("possible values: 2"), "{stderr}");
     }
 }
 
