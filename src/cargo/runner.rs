@@ -1,5 +1,8 @@
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+use serde::Deserialize;
 
 use super::model::{CargoContext, Selection};
 use crate::profile::Profile;
@@ -105,7 +108,7 @@ pub(crate) fn resolve_target(
     working_dir: &Path,
     target: &str,
     build_dir: bool,
-) -> crate::InternalResult<String> {
+) -> crate::InternalResult<(String, String)> {
     let mut host = None;
     if target == "host-tuple" || build_dir {
         let output = workspace_cargo(working_dir).arg("-vV").output()?;
@@ -144,29 +147,50 @@ pub(crate) fn resolve_target(
             .find_map(|line| line.strip_prefix("host: "))
             .map(str::to_owned);
     }
-    if target == "host-tuple" {
-        return host.ok_or_else(|| "Cargo did not report its host target".into());
+    if target.trim().ends_with(".json") {
+        return resolve_custom_target(&working_dir.join(target.trim()));
     }
-    if target.ends_with(".json") {
-        return Path::new(target)
-            .file_stem()
-            .and_then(|stem| stem.to_str())
-            .map(str::to_owned)
-            .ok_or_else(|| "invalid custom target filename".into());
+    let target = if target == "host-tuple" {
+        host.ok_or("Cargo did not report its host target")?
+    } else {
+        target.to_owned()
+    };
+    let suffix = if target.contains("-windows-") {
+        ".exe"
+    } else {
+        ""
+    };
+    Ok((target, suffix.into()))
+}
+
+fn resolve_custom_target(path: &Path) -> crate::InternalResult<(String, String)> {
+    #[derive(Deserialize)]
+    struct TargetSpec {
+        #[serde(rename = "exe-suffix")]
+        executable_suffix: Option<String>,
     }
-    Ok(target.to_owned())
+
+    let path = path.canonicalize().map_err(|error| {
+        format!(
+            "could not resolve custom target {}: {error}",
+            path.display()
+        )
+    })?;
+    let name = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .ok_or_else(|| format!("invalid custom target filename {}", path.display()))?;
+    let file = fs::File::open(&path)
+        .map_err(|error| format!("could not open custom target {}: {error}", path.display()))?;
+    let spec: TargetSpec = serde_json::from_reader(std::io::BufReader::new(file))
+        .map_err(|error| format!("could not read custom target {}: {error}", path.display()))?;
+    Ok((name.to_owned(), spec.executable_suffix.unwrap_or_default()))
 }
 
 pub(crate) fn firmware_elf_path(selection: &Selection, executable: Option<PathBuf>) -> PathBuf {
     if let Some(executable) = executable {
         return executable;
     }
-    let name = &selection.resolved_bin.name;
-    let bin = if selection.cargo.target.contains("-windows-") {
-        format!("{name}.exe")
-    } else {
-        name.clone()
-    };
     selection
         .cargo
         .target_dir
@@ -177,7 +201,10 @@ pub(crate) fn firmware_elf_path(selection: &Selection, executable: Option<PathBu
                 .as_ref()
                 .map_or("debug", Profile::directory),
         )
-        .join(bin)
+        .join(format!(
+            "{}{}",
+            selection.resolved_bin.name, selection.cargo.executable_suffix
+        ))
 }
 
 #[cfg(test)]

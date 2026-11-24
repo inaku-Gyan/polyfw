@@ -16,6 +16,7 @@ pub(crate) struct CargoContext {
     pub(crate) build_dir_override: Option<PathBuf>,
     /// Concrete triple or custom-target file stem for Cargo's public output layout.
     pub(crate) target: String,
+    pub(crate) executable_suffix: String,
 }
 
 #[derive(Debug, Deserialize)]

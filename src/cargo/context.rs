@@ -38,12 +38,11 @@ pub(crate) fn resolve(root: &Path, registry: &Registry) -> Result<BTreeMap<Strin
             .as_ref()
             .or(platform.target_dir.as_ref())
             .map(|value| absolute_directory(root, value));
+        let (target, executable_suffix) =
+            runner::resolve_target(&working_dir, &platform.target, build_dir_override.is_some())?;
         let mut cargo = CargoContext {
-            target: runner::resolve_target(
-                &working_dir,
-                &platform.target,
-                build_dir_override.is_some(),
-            )?,
+            target,
+            executable_suffix,
             working_dir,
             target_dir_override,
             build_dir_override,

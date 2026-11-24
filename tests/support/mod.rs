@@ -11,7 +11,11 @@ pub fn plfw() -> Command {
 }
 
 pub fn workspace_cargo(directory: &Path) -> Command {
-    let mut command = isolate_cargo_environment(Command::new("cargo"));
+    workspace_command(directory, "cargo")
+}
+
+pub fn workspace_command(directory: &Path, program: &str) -> Command {
+    let mut command = isolate_cargo_environment(Command::new(program));
     command
         .current_dir(directory)
         .env_remove("RUSTUP_TOOLCHAIN");

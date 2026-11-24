@@ -144,9 +144,10 @@ single image. verify shares the scope, executes format-check, lint, then tests, 
 
 `cargo::runner::firmware_elf_path` resolves the public artifact path for reports, hardware and
 editor consumers. Without a Cargo report it uses the effective target directory, resolved target
-subdirectory, profile directory and binary name. Built-in Windows targets use the `.exe` suffix.
-The `profile` module maps dev and test to `debug`, release and bench to `release`, and custom
-profiles to their names.
+subdirectory, profile directory and binary name with its executable suffix. See
+[target configuration](configuration.md#configure-the-firmware-target) for custom targets.
+Built-in Windows targets use the `.exe` suffix. The `profile` module maps dev and test to
+`debug`, release and bench to `release`, and custom profiles to their names.
 
 Each build stage checks Cargo's `compiler-artifact` messages for an executable belonging to the
 selected package and binary. The build report uses the path from that stage, including when Cargo

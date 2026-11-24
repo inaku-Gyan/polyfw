@@ -142,8 +142,9 @@ owns the lockfile and profiles. Packages outside their workspace directory are s
 Cargo declares them members; use Cargo's `package.workspace` setting when needed. A separate
 workspace registry or manifest field is unnecessary.
 
-`host-tuple` resolves to Cargo's concrete host target. A custom JSON target uses its file stem for
-artifact lookup; a relative target-file argument follows Cargo's working-directory rules.
+`host-tuple` resolves to Cargo's concrete host target. For an explicit custom JSON target,
+relative paths start at the effective Cargo `working-dir`. Artifact lookup uses the resolved
+file's stem for the target subdirectory and appends the optional `exe-suffix` to the binary name.
 Every Cargo child clears inherited `RUSTUP_TOOLCHAIN`, including metadata and toolchain queries.
 An outer `cargo +VERSION` therefore does not override the consuming project's toolchain.
 polyfw does not generate rust-analyzer settings; configure the editor through its native facilities.
