@@ -21,7 +21,7 @@ workspace identity. A Board is physical hardware.
 
 ## Rust library
 
-The `polyfw` Cargo package contains a library rooted at `src/lib.rs` and a binary rooted at
+The `polyfw` Cargo package contains a library rooted at `src/lib.rs` and a `plfw` binary rooted at
 `src/cli/main.rs`. The binary uses the library's public interface. The default `cli` feature
 enables the binary and its argument parsing, terminal UI and signal handling dependencies.
 Rust host programs can disable default features when declaring the dependency.

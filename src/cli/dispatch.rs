@@ -12,7 +12,7 @@ use crate::args::{FirmwareArgs, InfoJsonVersion, Task};
 use crate::probe::{self, Action};
 use crate::ui::Ui;
 
-const ACTION_PICKER_HINT: &str = "pass a firmware name or run polyfw select in a terminal";
+const ACTION_PICKER_HINT: &str = "pass a firmware name or run plfw select in a terminal";
 
 pub(crate) fn run(task: Task, root: Option<&Path>, ui: &Ui) -> Result<ExitCode> {
     if let Task::Schema { output } = task {
@@ -54,7 +54,7 @@ fn run_project(project: &Project, task: Task, ui: &Ui) -> Result<ExitCode> {
             ..
         }
     ) {
-        "pass a firmware name with `polyfw info --firmware <FIRMWARE>`"
+        "pass a firmware name with `plfw info --firmware <FIRMWARE>`"
     } else {
         ACTION_PICKER_HINT
     };

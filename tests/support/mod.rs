@@ -6,8 +6,8 @@ mod cargo_env;
 pub(crate) use cargo_env::isolate_cargo_environment;
 
 #[cfg(feature = "cli")]
-pub fn polyfw() -> Command {
-    isolate_cargo_environment(Command::new(env!("CARGO_BIN_EXE_polyfw")))
+pub fn plfw() -> Command {
+    isolate_cargo_environment(Command::new(env!("CARGO_BIN_EXE_plfw")))
 }
 
 pub fn workspace_cargo(directory: &Path) -> Command {

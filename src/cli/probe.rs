@@ -148,7 +148,7 @@ fn existing_elf(image: Option<Image<'_>>) -> Result<&Path> {
             .map(|profile| format!(" --profile {}", profile.name()))
             .unwrap_or_default();
         return Err(format!(
-            "ELF not found: {}; build it with polyfw build {}{profile}",
+            "ELF not found: {}; build it with plfw build {}{profile}",
             image.path.display(),
             image.firmware,
         )
@@ -326,7 +326,7 @@ mod tests {
                 assert_eq!(
                     error.to_string(),
                     format!(
-                        "ELF not found: {}; build it with polyfw build \
+                        "ELF not found: {}; build it with plfw build \
                          test-firmware{suffix}",
                         expected_path.display()
                     )

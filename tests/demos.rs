@@ -34,7 +34,7 @@ impl Example {
     }
 
     fn command(&self, args: &[&str]) -> Command {
-        let mut command = support::polyfw();
+        let mut command = support::plfw();
         command
             .current_dir(&self.root)
             .args(args)

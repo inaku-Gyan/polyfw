@@ -30,9 +30,9 @@ fn main() -> ExitCode {
         Err(error) => {
             let advice = error.downcast_ref::<polyfw::Error>().map(|error| match error.kind() {
                 ErrorKind::ProjectRoot => "; use --project-root <DIR>",
-                ErrorKind::UnknownFirmware => "; run polyfw info for valid names",
-                ErrorKind::StaleSelection => ";\n    run `polyfw select [FIRMWARE]` to replace it or `polyfw select --clear` to reset selection",
-                ErrorKind::InvalidSelection => "; run polyfw select FIRMWARE or polyfw select --clear",
+                ErrorKind::UnknownFirmware => "; run plfw info for valid names",
+                ErrorKind::StaleSelection => ";\n    run `plfw select [FIRMWARE]` to replace it or `plfw select --clear` to reset selection",
+                ErrorKind::InvalidSelection => "; run plfw select FIRMWARE or plfw select --clear",
                 _ => "",
             }).unwrap_or_default();
             ui.error(&format!("{error}{advice}"));

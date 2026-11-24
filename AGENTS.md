@@ -21,7 +21,7 @@ toolchain and fixture setup.
 | `just check` | Run formatting checks, Clippy and tests |
 | `just fix` | Rewrite sources with formatting and Clippy fixes; review the diff |
 | `just schema` | Regenerate `assets/polyfw.schema.json` after model/schema or package-version changes; commit the result |
-| `cargo test --locked --bin polyfw args::tests` | Run focused parser tests |
+| `cargo test --locked --bin plfw args::tests` | Run focused parser tests |
 | `cargo test --locked --test standalone` | Run project-free CLI and external-tool boundary tests |
 | `just run help init` | Inspect a subcommand's help; replace `init` as needed |
 | `just run --project-root /path/to/firmware-demos info` | Inspect a consuming project with the development binary |

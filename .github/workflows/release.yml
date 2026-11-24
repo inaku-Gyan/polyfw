@@ -90,9 +90,9 @@ jobs:
       - name: Build, smoke-test and archive native binary
         run: |
           cargo build --release --locked --target "$RELEASE_TARGET"
-          binary="target/$RELEASE_TARGET/release/polyfw"
+          binary="target/$RELEASE_TARGET/release/plfw"
           if [[ "$RUNNER_OS" == Windows ]]; then binary+=.exe; fi
-          test "$("$binary" --version)" = "polyfw $RELEASE_VERSION"
+          test "$("$binary" --version)" = "plfw $RELEASE_VERSION"
           "$binary" --help
           "$binary" schema > generated-schema.json
           diff -u <(jq -S . assets/polyfw.schema.json) <(jq -S . generated-schema.json)

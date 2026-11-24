@@ -16,8 +16,8 @@ use polyfw::Profile;
 /// merging, workspace membership, dependencies and profiles.
 #[derive(Debug, Parser)]
 #[command(
-    name = "polyfw",
-    bin_name = "polyfw",
+    name = "plfw",
+    bin_name = "plfw",
     version,
     after_long_help = "Project and selection:
   Find polyfw.toml in the current directory or an ancestor, or pass --project-root DIR.
@@ -29,16 +29,16 @@ use polyfw::Profile;
   run, flash and attach use an existing image: run build after changing firmware source.
 
 Examples:
-  polyfw init
-  polyfw info
-  polyfw select led-demo --release
-  polyfw verify --all-firmwares
-  polyfw build --all-firmwares --release
-  polyfw probes
-  polyfw run
-  polyfw select buzzer-demo --release
-  polyfw run
-  polyfw help build",
+  plfw init
+  plfw info
+  plfw select led-demo --release
+  plfw verify --all-firmwares
+  plfw build --all-firmwares --release
+  plfw probes
+  plfw run
+  plfw select buzzer-demo --release
+  plfw run
+  plfw help build",
     styles = Styles::styled()
         .header(AnsiColor::BrightGreen.on_default())
         .usage(AnsiColor::BrightGreen.on_default())
@@ -114,10 +114,10 @@ impl Cli {
 pub(crate) struct FirmwareArgs {
     /// Firmware ID for this invocation; otherwise use the saved firmware or a picker.
     ///
-    /// Use an ID from polyfw info. A named or picked firmware is transient unless
+    /// Use an ID from plfw info. A named or picked firmware is transient unless
     /// --select is passed. The picker opens only when no firmware is saved; stale or
     /// malformed saved state is an error, including with a one-time FIRMWARE override.
-    /// Replace it with polyfw select FIRMWARE or clear it with polyfw select --clear.
+    /// Replace it with plfw select FIRMWARE or clear it with plfw select --clear.
     /// Pickers require a terminal; name a firmware in scripts.
     #[arg(verbatim_doc_comment)]
     pub(crate) firmware: Option<String>,
@@ -235,13 +235,13 @@ pub(crate) enum Task {
     /// --project-root, without searching ancestors. Refuse to overwrite any existing
     /// polyfw.toml. Create .polyfw-state/.gitignore with a single * pattern, or use
     /// a regular file that already exists there. Print the paths created.
-    /// Edit the TODO values before running polyfw info to validate the project.
+    /// Edit the TODO values before running plfw info to validate the project.
     /// Runs without project configuration, external tools, network access or prompts.
     #[command(
         verbatim_doc_comment,
         after_long_help = "Examples:
-  polyfw init
-  polyfw --project-root /path/to/firmware-demos init"
+  plfw init
+  plfw --project-root /path/to/firmware-demos init"
     )]
     Init,
 
@@ -267,11 +267,11 @@ pub(crate) enum Task {
         visible_alias = "i",
         verbatim_doc_comment,
         after_long_help = "Examples:
-  polyfw info
-  polyfw info --firmware
-  polyfw info --firmware led-demo
-  polyfw info --json 2
-  polyfw info --firmware buzzer-demo --json=2"
+  plfw info
+  plfw info --firmware
+  plfw info --firmware led-demo
+  plfw info --json 2
+  plfw info --firmware buzzer-demo --json=2"
     )]
     Info {
         /// Show one firmware's details; omit FIRMWARE to pick interactively without saving.
@@ -296,10 +296,10 @@ pub(crate) enum Task {
         visible_alias = "s",
         verbatim_doc_comment,
         after_long_help = "Examples:
-  polyfw select led-demo --release
-  polyfw select buzzer-demo --release
-  polyfw select
-  polyfw select --clear"
+  plfw select led-demo --release
+  plfw select buzzer-demo --release
+  plfw select
+  plfw select --clear"
     )]
     Select {
         /// Save this firmware ID; otherwise open the picker.
@@ -327,8 +327,8 @@ pub(crate) enum Task {
     #[command(
         verbatim_doc_comment,
         after_long_help = "Examples:
-  polyfw clean led-demo
-  polyfw clean --all-firmwares"
+  plfw clean led-demo
+  plfw clean --all-firmwares"
     )]
     Clean(FirmwareArgs),
 
@@ -343,10 +343,10 @@ pub(crate) enum Task {
         visible_alias = "b",
         verbatim_doc_comment,
         after_long_help = "Examples:
-  polyfw build
-  polyfw build --select led-demo --release
-  polyfw build buzzer-demo --release
-  polyfw build --all-firmwares --release"
+  plfw build
+  plfw build --select led-demo --release
+  plfw build buzzer-demo --release
+  plfw build --all-firmwares --release"
     )]
     Build {
         #[command(flatten)]
@@ -360,16 +360,16 @@ pub(crate) enum Task {
 
     /// Flash and verify an existing ELF, then start and monitor RTT/defmt.
     ///
-    /// Use the resolved firmware/profile image without building. Run polyfw build after
+    /// Use the resolved firmware/profile image without building. Run plfw build after
     /// source changes. Omitted probe and speed options are delegated to probe-rs.
     /// Ctrl-C ends the probe-rs session; firmware may continue running.
     #[command(
         verbatim_doc_comment,
         after_long_help = "Examples:
-  polyfw run led-demo
-  polyfw run buzzer-demo --release
-  polyfw run --release
-  polyfw run led-demo --probe VID:PID:SERIAL --speed 4000"
+  plfw run led-demo
+  plfw run buzzer-demo --release
+  plfw run --release
+  plfw run led-demo --probe VID:PID:SERIAL --speed 4000"
     )]
     Run {
         #[command(flatten)]
@@ -382,14 +382,14 @@ pub(crate) enum Task {
 
     /// Flash and verify an existing ELF, reset the firmware, then exit.
     ///
-    /// Use the resolved firmware/profile image without building. Run polyfw build after
+    /// Use the resolved firmware/profile image without building. Run plfw build after
     /// source changes. This command does not start an RTT monitor.
     #[command(
         visible_aliases = ["f", "download", "d"],
         verbatim_doc_comment,
         after_long_help = "Examples:
-  polyfw flash led-demo --release
-  polyfw flash --select buzzer-demo --release"
+  plfw flash led-demo --release
+  plfw flash --select buzzer-demo --release"
     )]
     Flash {
         #[command(flatten)]
@@ -406,9 +406,9 @@ pub(crate) enum Task {
     #[command(
         verbatim_doc_comment,
         after_long_help = "Examples:
-  polyfw attach led-demo
-  polyfw attach buzzer-demo --release
-  polyfw attach --release --no-catch-reset"
+  plfw attach led-demo
+  plfw attach buzzer-demo --release
+  plfw attach --release --no-catch-reset"
     )]
     Attach {
         #[command(flatten)]
@@ -433,9 +433,9 @@ pub(crate) enum Task {
     #[command(
         verbatim_doc_comment,
         after_long_help = "Examples:
-  polyfw fmt led-demo
-  polyfw fmt buzzer-demo
-  polyfw fmt --all-firmwares"
+  plfw fmt led-demo
+  plfw fmt buzzer-demo
+  plfw fmt --all-firmwares"
     )]
     Fmt(FirmwareArgs),
 
@@ -449,9 +449,9 @@ pub(crate) enum Task {
     #[command(
         verbatim_doc_comment,
         after_long_help = "Examples:
-  polyfw lint led-demo
-  polyfw lint buzzer-demo
-  polyfw lint --all-firmwares"
+  plfw lint led-demo
+  plfw lint buzzer-demo
+  plfw lint --all-firmwares"
     )]
     Lint(FirmwareArgs),
 
@@ -465,9 +465,9 @@ pub(crate) enum Task {
         visible_alias = "t",
         verbatim_doc_comment,
         after_long_help = "Examples:
-  polyfw test led-demo
-  polyfw test buzzer-demo
-  polyfw test --all-firmwares"
+  plfw test led-demo
+  plfw test buzzer-demo
+  plfw test --all-firmwares"
     )]
     Test(FirmwareArgs),
 
@@ -481,10 +481,10 @@ pub(crate) enum Task {
         visible_alias = "v",
         verbatim_doc_comment,
         after_long_help = "Examples:
-  polyfw verify
-  polyfw verify led-demo
-  polyfw verify buzzer-demo
-  polyfw verify --all-firmwares"
+  plfw verify
+  plfw verify led-demo
+  plfw verify buzzer-demo
+  plfw verify --all-firmwares"
     )]
     Verify(FirmwareArgs),
 }
@@ -547,13 +547,13 @@ mod tests {
         for command in Cli::command().get_subcommands() {
             for args in [
                 vec![
-                    "polyfw",
+                    "plfw",
                     "--project-root",
                     "../another project",
                     command.get_name(),
                 ],
                 vec![
-                    "polyfw",
+                    "plfw",
                     command.get_name(),
                     "--project-root",
                     "../another project",
@@ -564,12 +564,12 @@ mod tests {
             }
         }
         assert!(
-            Cli::try_parse_from(["polyfw", "info"])
+            Cli::try_parse_from(["plfw", "info"])
                 .unwrap()
                 .project_root
                 .is_none()
         );
-        assert!(Cli::try_parse_from(["polyfw", "info", "--project-root"]).is_err());
+        assert!(Cli::try_parse_from(["plfw", "info", "--project-root"]).is_err());
     }
 
     #[test]
@@ -604,7 +604,7 @@ mod tests {
                 ),
             ] {
                 let has_firmware_flag = flags.contains(&"--firmware");
-                let mut args = vec!["polyfw", command];
+                let mut args = vec!["plfw", command];
                 args.extend(flags);
                 let task = Cli::try_parse_from(args).unwrap().command.unwrap();
                 assert!(task.firmware_args().is_none());
@@ -629,7 +629,7 @@ mod tests {
             vec!["--select"],
             vec!["--all-firmwares"],
         ] {
-            let mut args = vec!["polyfw", "info"];
+            let mut args = vec!["plfw", "info"];
             args.extend(flags);
             assert!(Cli::try_parse_from(args).is_err());
         }
@@ -638,19 +638,19 @@ mod tests {
     #[test]
     fn image_commands_accept_cargo_profile_flags_and_reject_conflicts_and_path_names() {
         for command in ["select", "build", "run", "flash", "attach"] {
-            let cli = Cli::try_parse_from(["polyfw", command]).unwrap();
+            let cli = Cli::try_parse_from(["plfw", command]).unwrap();
             assert!(cli.command.unwrap().profile_override().is_none());
             for flag in ["-r", "--release"] {
-                let cli = Cli::try_parse_from(["polyfw", command, flag]).unwrap();
+                let cli = Cli::try_parse_from(["plfw", command, flag]).unwrap();
                 assert_eq!(
                     cli.command.unwrap().profile_override().unwrap().name(),
                     "release"
                 );
-                let error = Cli::try_parse_from(["polyfw", command, flag, "--profile", "release"])
+                let error = Cli::try_parse_from(["plfw", command, flag, "--profile", "release"])
                     .unwrap_err();
                 assert_eq!(error.kind(), clap::error::ErrorKind::ArgumentConflict);
             }
-            let cli = Cli::try_parse_from(["polyfw", command, "--dev"]).unwrap();
+            let cli = Cli::try_parse_from(["plfw", command, "--dev"]).unwrap();
             assert_eq!(
                 cli.command.unwrap().profile_override().unwrap().name(),
                 "dev"
@@ -662,20 +662,20 @@ mod tests {
                 vec!["--profile", "release"],
                 vec!["--profile", "bench-debug"],
             ] {
-                let mut args = vec!["polyfw", command, "--dev"];
+                let mut args = vec!["plfw", command, "--dev"];
                 args.extend(flags);
                 let error = Cli::try_parse_from(args).unwrap_err();
                 assert_eq!(error.kind(), clap::error::ErrorKind::ArgumentConflict);
             }
-            let cli = Cli::try_parse_from(["polyfw", command, "--profile", "bench-debug"]).unwrap();
+            let cli = Cli::try_parse_from(["plfw", command, "--profile", "bench-debug"]).unwrap();
             assert_eq!(
                 cli.command.unwrap().profile_override().unwrap().name(),
                 "bench-debug"
             );
-            assert!(Cli::try_parse_from(["polyfw", command, "--profile", "../image"]).is_err());
+            assert!(Cli::try_parse_from(["plfw", command, "--profile", "../image"]).is_err());
         }
         for flags in [vec!["-r"], vec!["--dev"], vec!["--profile", "dev"]] {
-            let mut args = vec!["polyfw", "select", "--clear"];
+            let mut args = vec!["plfw", "select", "--clear"];
             args.extend(flags);
             let error = Cli::try_parse_from(args).unwrap_err();
             assert_eq!(error.kind(), clap::error::ErrorKind::ArgumentConflict);
@@ -686,13 +686,13 @@ mod tests {
     fn firmware_commands_accept_select_with_or_without_a_firmware() {
         for command in ["build", "clean", "fmt", "lint", "test", "verify"] {
             for flag in ["-s", "--select"] {
-                let cli = Cli::try_parse_from(["polyfw", command, flag, "sentry-chassis"])
+                let cli = Cli::try_parse_from(["plfw", command, flag, "sentry-chassis"])
                     .expect("select with a firmware must parse");
                 let firmwares = cli.command.as_ref().unwrap().firmware_args().unwrap();
                 assert!(firmwares.select);
                 assert_eq!(firmwares.firmware.as_deref(), Some("sentry-chassis"));
 
-                let cli = Cli::try_parse_from(["polyfw", command, flag])
+                let cli = Cli::try_parse_from(["plfw", command, flag])
                     .expect("select without a firmware must parse");
                 let firmwares = cli.command.as_ref().unwrap().firmware_args().unwrap();
                 assert!(firmwares.select);
@@ -705,7 +705,7 @@ mod tests {
     fn all_firmwares_conflicts_with_a_firmware_and_select() {
         for command in ["build", "clean", "fmt", "lint", "test", "verify"] {
             for argument in ["--select", "sentry-chassis"] {
-                let error = Cli::try_parse_from(["polyfw", command, "--all-firmwares", argument])
+                let error = Cli::try_parse_from(["plfw", command, "--all-firmwares", argument])
                     .expect_err("all firmwares must reject single-firmware options");
                 assert_eq!(error.kind(), clap::error::ErrorKind::ArgumentConflict);
             }
@@ -715,19 +715,18 @@ mod tests {
     #[test]
     fn hardware_commands_select_one_firmware_and_reject_all_firmwares() {
         for command in ["run", "flash", "attach", "reset"] {
-            let cli =
-                Cli::try_parse_from(["polyfw", command, "--select", "sentry-chassis"]).unwrap();
+            let cli = Cli::try_parse_from(["plfw", command, "--select", "sentry-chassis"]).unwrap();
             let firmwares = cli.command.as_ref().unwrap().firmware_args().unwrap();
             assert!(firmwares.select);
             assert_eq!(firmwares.firmware.as_deref(), Some("sentry-chassis"));
             assert!(!firmwares.all_firmwares);
-            assert!(Cli::try_parse_from(["polyfw", command, "--all-firmwares"]).is_err());
-            assert!(Cli::try_parse_from(["polyfw", command, "--speed", "0"]).is_err());
+            assert!(Cli::try_parse_from(["plfw", command, "--all-firmwares"]).is_err());
+            assert!(Cli::try_parse_from(["plfw", command, "--speed", "0"]).is_err());
         }
         for argument in ["sentry-chassis", "--select", "--probe", "--speed"] {
-            assert!(Cli::try_parse_from(["polyfw", "probes", argument]).is_err());
+            assert!(Cli::try_parse_from(["plfw", "probes", argument]).is_err());
         }
-        assert!(Cli::try_parse_from(["polyfw", "reset", "--release"]).is_err());
+        assert!(Cli::try_parse_from(["plfw", "reset", "--release"]).is_err());
     }
 
     #[test]
@@ -739,7 +738,7 @@ mod tests {
             ("reset", false),
         ] {
             let mut args = vec![
-                "polyfw",
+                "plfw",
                 command,
                 "sentry-chassis",
                 "--select",
@@ -788,7 +787,7 @@ mod tests {
     #[test]
     fn run_and_attach_default_to_nonblocking_logs_and_accept_native_monitor_controls() {
         for command in ["run", "attach"] {
-            let cli = Cli::try_parse_from(["polyfw", command]).unwrap();
+            let cli = Cli::try_parse_from(["plfw", command]).unwrap();
             let (target, profile, monitor) = monitor_task(cli.command.unwrap());
             assert!(profile.explicit().is_none());
             assert!(target.probe.is_none());
@@ -798,7 +797,7 @@ mod tests {
             assert!(!monitor.no_catch_hardfault);
 
             let cli = Cli::try_parse_from([
-                "polyfw",
+                "plfw",
                 command,
                 "--release",
                 "--probe",
@@ -822,7 +821,7 @@ mod tests {
             assert!(monitor.no_catch_hardfault);
         }
         for command in ["flash", "reset"] {
-            assert!(Cli::try_parse_from(["polyfw", command, "--no-catch-reset"]).is_err());
+            assert!(Cli::try_parse_from(["plfw", command, "--no-catch-reset"]).is_err());
         }
     }
 

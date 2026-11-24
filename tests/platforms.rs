@@ -38,8 +38,7 @@ fn info_requires_a_terminal_to_pick_even_when_a_firmware_is_saved() {
             assert!(!output.status.success());
             assert!(output.stdout.is_empty());
             assert!(
-                String::from_utf8_lossy(&output.stderr)
-                    .contains("polyfw info --firmware <FIRMWARE>")
+                String::from_utf8_lossy(&output.stderr).contains("plfw info --firmware <FIRMWARE>")
             );
             assert_eq!(fs::read(&state).ok(), expected_state);
             assert_eq!(fs::read(&launch).ok(), expected_launch);
@@ -110,7 +109,7 @@ impl Project {
     }
 
     fn command(&self, args: &[&str]) -> Command {
-        let mut command = support::polyfw();
+        let mut command = support::plfw();
         command
             .current_dir(&self.project)
             .args(args)

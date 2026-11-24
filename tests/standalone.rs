@@ -18,13 +18,13 @@ fn help_version_and_schema_work_without_a_project_or_rust_tools() {
     ] {
         let output = fixture.command().args(args).output().unwrap();
         succeeded(&output);
-        assert!(String::from_utf8(output.stdout).unwrap().contains("polyfw"));
+        assert!(String::from_utf8(output.stdout).unwrap().contains("plfw"));
     }
     let output = fixture.command().arg("--version").output().unwrap();
     succeeded(&output);
     assert_eq!(
         String::from_utf8(output.stdout).unwrap().trim(),
-        concat!("polyfw ", env!("CARGO_PKG_VERSION"))
+        concat!("plfw ", env!("CARGO_PKG_VERSION"))
     );
     let output = fixture
         .command()
@@ -96,7 +96,7 @@ fn initialization_creates_template_and_state_ignore_without_tools_or_ancestor_di
         message.contains("Add /target/ and /.vscode/launch.json"),
         "{message}"
     );
-    assert!(message.contains("polyfw info"), "{message}");
+    assert!(message.contains("plfw info"), "{message}");
     assert_eq!(fs::read(ignore).unwrap(), b"*\n");
     assert_eq!(fs::read_dir(state).unwrap().count(), 1);
 
@@ -550,7 +550,7 @@ impl Fixture {
     }
 
     fn command(&self) -> Command {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_polyfw"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_plfw"));
         command
             .current_dir(&self.root)
             .env("PATH", self.root.join("tools"))

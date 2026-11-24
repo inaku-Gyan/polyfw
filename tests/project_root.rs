@@ -37,7 +37,7 @@ fn firmware_paths_follow_explicit_platform_and_cpu_reporting_remains_declarative
     )
     .unwrap();
     let info = |environment: &[(&str, &str)]| {
-        let output = support::polyfw()
+        let output = support::plfw()
             .arg("--project-root")
             .arg(&root)
             .args(["info", "--json"])
@@ -156,7 +156,7 @@ fn cargo_commands_use_each_workspaces_pin_instead_of_the_tools_inherited_toolcha
 
     for action in ["verify", "build"] {
         succeeded(
-            &support::polyfw()
+            &support::plfw()
                 .current_dir(&common)
                 .arg("--project-root")
                 .arg(&firmware)
@@ -185,7 +185,7 @@ fn schema_is_printed_or_written_without_loading_the_operating_project() {
     let root = std::env::temp_dir().join(format!("polyfw-schema-{}", std::process::id()));
     fs::create_dir_all(&root).unwrap();
     fs::write(root.join("polyfw.toml"), "invalid registry").unwrap();
-    let output = Command::new(env!("CARGO_BIN_EXE_polyfw"))
+    let output = Command::new(env!("CARGO_BIN_EXE_plfw"))
         .current_dir(&root)
         .args(["schema", "--project-root", "missing-project"])
         .output()
@@ -196,7 +196,7 @@ fn schema_is_printed_or_written_without_loading_the_operating_project() {
         include_str!("../assets/polyfw.schema.json")
     );
     assert!(!root.join("polyfw.schema.json").exists());
-    let output = Command::new(env!("CARGO_BIN_EXE_polyfw"))
+    let output = Command::new(env!("CARGO_BIN_EXE_plfw"))
         .current_dir(&root)
         .args(["schema", "--output", "schema files/project.json"])
         .output()
@@ -240,7 +240,7 @@ fn one_tool_keeps_two_projects_selections_and_debug_files_independent() {
         .unwrap();
     }
     let select = |caller: &Path, project: &Path| {
-        support::polyfw()
+        support::plfw()
             .current_dir(caller)
             .arg("--project-root")
             .arg(root.join("missing"))
@@ -257,7 +257,7 @@ fn one_tool_keeps_two_projects_selections_and_debug_files_independent() {
     succeeded(&select(&firmware, &platform));
     let saved = fs::read(platform.join(".polyfw-state/selected")).unwrap();
     let launch = fs::read(platform.join(".vscode/launch.json")).unwrap();
-    let clear = Command::new(env!("CARGO_BIN_EXE_polyfw"))
+    let clear = Command::new(env!("CARGO_BIN_EXE_plfw"))
         .current_dir(&platform)
         .arg("--project-root")
         .arg(&firmware)

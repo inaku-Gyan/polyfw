@@ -25,7 +25,7 @@ features or updating dependencies.
 
 ## Run against a consuming project
 
-`just run` runs the development CLI with locked dependencies. Pass polyfw arguments directly
+`just run` runs the development CLI with locked dependencies. Pass `plfw` arguments directly
 after the recipe name; their boundaries are preserved, including quoted paths with spaces.
 With no arguments, it prints CLI help.
 
@@ -46,8 +46,8 @@ just run --project-root /path/to/firmware-demos info
 just run --project-root /path/to/firmware-demos verify --all-firmwares
 ```
 
-Or install this checkout with `cargo install --path . --locked`. Cargo children launched by polyfw
-use the consuming workspaces' pins rather than inheriting the compiler used to run polyfw.
+Or install this checkout with `cargo install --path . --locked`. Cargo children launched by `plfw`
+use the consuming workspaces' pins rather than inheriting the compiler used to run `plfw`.
 
 ## Find the relevant code
 
@@ -157,7 +157,7 @@ Use `just test-demos minimal --nocapture` to run the minimal project's tests wit
 The recipe forwards test-name filters and harness options after Cargo's `--` separator.
 
 `tests/demos.rs` copies the checked-in projects into temporary directories and invokes the
-built polyfw executable. It exercises real MCU builds, host library tests, selection, external
+built `plfw` executable. It exercises real MCU builds, host library tests, selection, external
 workspace members and dependency scopes. The tests check reported artifact paths, platform
 CPU/chip values and linked 32-bit ARM ELF executables with Thumb entry points in flash, including
 independent builds of a package's two binaries. Failing host tests introduced in the copies check

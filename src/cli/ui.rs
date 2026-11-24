@@ -57,7 +57,7 @@ impl Ui {
         }
         println!("Edit the TODO values in polyfw.toml to match your Cargo firmware project.");
         println!("Add /target/ and /.vscode/launch.json to the project's .gitignore.");
-        println!("Then run polyfw info from that directory, or pass --project-root <DIR>.");
+        println!("Then run plfw info from that directory, or pass --project-root <DIR>.");
     }
 
     pub(crate) fn selected(&self, firmware: &str, profile: Option<&Profile>) {

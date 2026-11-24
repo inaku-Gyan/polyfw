@@ -132,13 +132,13 @@ polyfw does not generate rust-analyzer settings; configure the editor through it
 From your existing Cargo firmware project, create a configuration template:
 
 ```sh
-polyfw init
+plfw init
 ```
 
 To initialize an existing directory from elsewhere:
 
 ```sh
-polyfw --project-root /path/to/firmware-demos init
+plfw --project-root /path/to/firmware-demos init
 ```
 
 The destination is exactly the current directory or the explicit `--project-root`, with relative
@@ -162,7 +162,7 @@ fails, `init` reports the affected path and rolls back the paths it created so y
 issue and retry. On success, it lists the files it created.
 
 The command is non-interactive and works without Cargo, Rust, Git or network access. After editing
-the template, add the [ignore entries below](#register-the-firmware-targets) and run `polyfw info`
+the template, add the [ignore entries below](#register-the-firmware-targets) and run `plfw info`
 to validate the configuration and Cargo setup.
 
 ## Register the firmware targets
@@ -265,7 +265,7 @@ For offline use or a development build, generate a local schema using the execut
 corresponding to the declared configuration contract:
 
 ```sh
-polyfw schema --output polyfw.schema.json
+plfw schema --output polyfw.schema.json
 ```
 
 Then replace the remote directive in `polyfw.toml` with:
@@ -305,15 +305,15 @@ every clone, add `/.polyfw-state/` to the project's root `.gitignore` and commit
 Then inspect the registry and run the first checks:
 
 ```sh
-polyfw info
-polyfw info --firmware led-demo
-polyfw info --firmware buzzer-demo
-polyfw select led-demo --release
-polyfw verify --all-firmwares
-polyfw build --all-firmwares --release
+plfw info
+plfw info --firmware led-demo
+plfw info --firmware buzzer-demo
+plfw select led-demo --release
+plfw verify --all-firmwares
+plfw build --all-firmwares --release
 ```
 
-Connect the firmware before running `polyfw flash`. See [hardware commands](usage.md#flash-and-monitor)
+Connect the firmware before running `plfw flash`. See [hardware commands](usage.md#flash-and-monitor)
 for probe selection and image freshness.
 
 ## Check platform consistency
@@ -416,8 +416,8 @@ Git dependencies are excluded. The globs do not scan directories, and traversal 
 excluded packages. They select polyfw's checks; Cargo still builds whatever dependencies those
 packages require. See [check planning](design.md#check-planning) for host and MCU classification.
 
-In this example, `polyfw verify led-demo` checks the LED package; sharing a workspace does not
-make `buzzer-demo` its dependency. Use `polyfw verify --all-firmwares` to check both firmware packages.
+In this example, `plfw verify led-demo` checks the LED package; sharing a workspace does not
+make `buzzer-demo` its dependency. Use `plfw verify --all-firmwares` to check both firmware packages.
 
 ## Add firmware and platforms
 
@@ -427,13 +427,13 @@ A Platform can describe a board model or MCU type and serve firmware in differen
 Override `working-dir` on a firmware to select another Cargo configuration/toolchain context.
 Cargo supplies workspace ownership; membership does not require physical containment.
 
-Run `polyfw info`, `polyfw verify --all-firmwares` and `polyfw build --all-firmwares --release`
+Run `plfw info`, `plfw verify --all-firmwares` and `plfw build --all-firmwares --release`
 after changing the registry. The polyfw project root need not be a Cargo workspace or Git repository.
 
 Migrating from 0.1 requires replacing `bsps`/`boards` with `platforms`/`firmwares`, moving workspace
 selection to `working-dir`, and declaring target/CPU. Review directory defaults and update both
-version declarations. Replace saved selection with `polyfw select FIRMWARE` or clear it using
-`polyfw select --clear`. Old configuration, CLI, JSON and saved-state aliases are not retained.
+version declarations. Replace saved selection with `plfw select FIRMWARE` or clear it using
+`plfw select --clear`. Old configuration, CLI, JSON and saved-state aliases are not retained.
 
 ## Choose who manages VS Code configuration
 
@@ -456,7 +456,7 @@ Projects can expose familiar recipes while keeping polyfw installed separately:
 ```just
 [private]
 _polyfw *args:
-    polyfw --project-root "{{justfile_directory()}}" {{args}}
+    plfw --project-root "{{justfile_directory()}}" {{args}}
 
 build *args:
     just _polyfw build {{args}}

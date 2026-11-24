@@ -107,7 +107,7 @@ Rust suite runs on Linux through reusable CI; the five-platform binary matrix do
 physical probe/debugger validation.
 
 Archives are named `polyfw-<target>.tar.gz` or `polyfw-<target>.zip`. Each contains a directory
-`polyfw-<target>/` holding `polyfw` (`polyfw.exe` on Windows), `README.md`, `CHANGELOG.md`, `LICENSE`
+`polyfw-<target>/` holding `plfw` (`plfw.exe` on Windows), `README.md`, `CHANGELOG.md`, `LICENSE`
 and `docs/` with the same guides included in the crate, excluding `docs/adr/` and `docs/research/`.
 The tag selects the version. Binstall metadata in `Cargo.toml` specifies this URL and executable
 layout. README and the bundled guides use relative links for offline reading. The executable can

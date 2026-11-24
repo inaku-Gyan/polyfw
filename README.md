@@ -30,7 +30,7 @@ coordinates the firmware workflow.
 Initialize a configuration in your existing firmware project:
 
 ```sh
-polyfw init
+plfw init
 ```
 
 [Edit the generated configuration](docs/configuration.md#initialize-a-configuration) to match
@@ -39,28 +39,28 @@ and `buzzer-demo` for the same physical board through the `demo-board` platform.
 project or any subdirectory:
 
 ```sh
-polyfw info
-polyfw select led-demo --release
-polyfw verify --all-firmwares
-polyfw build --all-firmwares --release
-polyfw flash
-polyfw select buzzer-demo --release
-polyfw flash
+plfw info
+plfw select led-demo --release
+plfw verify --all-firmwares
+plfw build --all-firmwares --release
+plfw flash
+plfw select buzzer-demo --release
+plfw flash
 ```
 
 `verify --all-firmwares` checks formatting, runs MCU and host Clippy, and runs host tests for
 both packages. `build --all-firmwares --release` creates both release images; the saved selection
 chooses which image to flash.
 `run`, `flash` and `attach` use an existing image, so rebuild after changing source. Use
-`polyfw run` to flash and monitor, or `polyfw attach` to monitor firmware already on the board.
+`plfw run` to flash and monitor, or `plfw attach` to monitor firmware already on the board.
 
 To operate on a project from elsewhere:
 
 ```sh
-polyfw --project-root /path/to/firmware-demos info
+plfw --project-root /path/to/firmware-demos info
 ```
 
-Use `polyfw help build` for command help, or see [Usage](docs/usage.md) for the full workflow.
+Use `plfw help build` for command help, or see [Usage](docs/usage.md) for the full workflow.
 
 ## Install
 
@@ -82,6 +82,8 @@ changelog, MIT license and guides. Verify the archive against `SHA256SUMS`, extr
 the executable on `PATH`. See [release assets and build targets](docs/releasing.md#assets-and-build-targets)
 for the build and test environments.
 
+Run `plfw --version` to check your installation.
+
 <details>
 <summary>Install a prerelease</summary>
 
@@ -102,7 +104,7 @@ Run from the polyfw repository:
 
 ```sh
 cargo install --path . --locked
-polyfw --version
+plfw --version
 ```
 
 </details>

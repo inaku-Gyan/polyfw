@@ -33,7 +33,7 @@ default = ["cli"]
 cli = ["dep:clap", "dep:comfy-table", "dep:ctrlc", "dep:dialoguer"]
 
 [[bin]]
-name = "polyfw"
+name = "plfw"
 path = "src/cli/main.rs"
 required-features = ["cli"]
 

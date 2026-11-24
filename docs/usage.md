@@ -1,13 +1,13 @@
 # Usage
 
-Run `polyfw init` to create a `polyfw.toml` template, then follow
+Run `plfw init` to create a `polyfw.toml` template, then follow
 [Project configuration](configuration.md#initialize-a-configuration) to edit it for your project.
 The commands below use its `led-demo` and `buzzer-demo` firmware targets, which share the
-`demo-board` platform. Replace them with firmware IDs listed by your project's `polyfw info`.
+`demo-board` platform. Replace them with firmware IDs listed by your project's `plfw info`.
 
 ## Command overview
 
-Run `polyfw help COMMAND` for the installed version's arguments and examples.
+Run `plfw help COMMAND` for the installed version's arguments and examples.
 
 | Command | Purpose | Aliases |
 | --- | --- | --- |
@@ -27,16 +27,16 @@ Run `polyfw help COMMAND` for the installed version's arguments and examples.
 | `attach` | Monitor an existing image without flashing | |
 | `reset` | Reset a board without an image | |
 
-polyfw does not forward arbitrary Cargo arguments. Define targets, features and profiles in the
+`plfw` does not forward arbitrary Cargo arguments. Define targets, features and profiles in the
 consuming project, or invoke Cargo directly when an operation needs different flags.
 
 ## Choose a project
 
-By default, polyfw searches the working directory and its ancestors for the nearest
+By default, `plfw` searches the working directory and its ancestors for the nearest
 `polyfw.toml`. To operate elsewhere:
 
 ```sh
-polyfw --project-root /path/to/firmware-demos info
+plfw --project-root /path/to/firmware-demos info
 ```
 
 `--project-root` is global and can appear before or after the command. Relative values start
@@ -54,30 +54,30 @@ only probe-rs and runs from the caller's directory.
 ## Save a firmware and profile
 
 ```sh
-polyfw select led-demo --release
-polyfw build
-polyfw flash
+plfw select led-demo --release
+plfw build
+plfw flash
 ```
 
 To switch to the buzzer firmware on the same physical board:
 
 ```sh
-polyfw select buzzer-demo --release
-polyfw build
-polyfw flash
+plfw select buzzer-demo --release
+plfw build
+plfw flash
 ```
 
 `select` saves the firmware and any explicit profile in `.polyfw-state/selected`. With editor
-generation enabled, it also writes the debug configuration. Use `polyfw select` to choose in a
-searchable picker, or `polyfw select --clear` to remove the state and managed launch file.
+generation enabled, it also writes the debug configuration. Use `plfw select` to choose in a
+searchable picker, or `plfw select --clear` to remove the state and managed launch file.
 
 | Invocation | Firmware choice | Saved state |
 | --- | --- | --- |
-| `polyfw build` | Saved firmware, or a picker if no firmware is saved | Unchanged |
-| `polyfw build buzzer-demo` | Named firmware for this invocation | Unchanged |
-| `polyfw build --select buzzer-demo` | Named firmware | Saved before building |
-| `polyfw build --select` | Always open the picker | Saved before building |
-| `polyfw build --all-firmwares` | Every registered firmware | Unchanged |
+| `plfw build` | Saved firmware, or a picker if no firmware is saved | Unchanged |
+| `plfw build buzzer-demo` | Named firmware for this invocation | Unchanged |
+| `plfw build --select buzzer-demo` | Named firmware | Saved before building |
+| `plfw build --select` | Always open the picker | Saved before building |
+| `plfw build --all-firmwares` | Every registered firmware | Unchanged |
 
 The same firmware rules apply to `clean`, `fmt`, `lint`, `test` and `verify`. Hardware commands
 accept a firmware and `--select`, and operate on one firmware. `--all-firmwares` conflicts with a firmware
@@ -87,13 +87,13 @@ argument and `--select`. Pickers require a terminal; scripts should use a firmwa
 `build`, `run`, `flash` and `attach` inherit the saved profile, including with a one-time firmware
 override. Use `--dev`, `-r`/`--release` or `--profile NAME` to override it. These forms are mutually
 exclusive. Saving a selection retains only an explicitly supplied profile:
-`polyfw select led-demo` clears any previously saved profile. With no explicit or saved profile,
-polyfw omits the Cargo profile flag and Cargo's build default applies. An explicit `--dev` is saved.
+`plfw select led-demo` clears any previously saved profile. With no explicit or saved profile,
+`plfw` omits the Cargo profile flag and Cargo's build default applies. An explicit `--dev` is saved.
 `--all-firmwares` uses only the profile passed on that invocation. `clean`, `fmt`, `lint`, `test`,
 `verify` and `reset` take no profile option.
 
 A stale or malformed saved selection is an error. A one-time firmware override still reads that
-state; replace it with `polyfw select led-demo` or remove it with `polyfw select --clear`.
+state; replace it with `plfw select led-demo` or remove it with `plfw select --clear`.
 Clearing works without Cargo and without parsing the old state. Concurrent saves and clears in the
 same project wait for the current [selection write](design.md#selection-and-editor-writes) to finish.
 A successful save remains even if the following build or hardware action fails.
@@ -101,15 +101,15 @@ A successful save remains even if the following build or hardware action fails.
 ## Inspect firmwares and images
 
 ```sh
-polyfw info
-polyfw info --firmware led-demo
-polyfw info --firmware buzzer-demo --json=2 > buzzer-demo.json
+plfw info
+plfw info --firmware led-demo
+plfw info --firmware buzzer-demo --json=2 > buzzer-demo.json
 ```
 
 The overview lists all firmwares, their referenced platforms, the saved selection, and dev/release ELF
 presence. A different saved profile adds another artifact column. Details show one firmware's
 package, binary, workspace, target, CPU, chip, absolute ELF paths and check dependencies.
-`polyfw info --firmware` opens the picker for this query without saving the choice.
+`plfw info --firmware` opens the picker for this query without saving the choice.
 
 Platform descriptions appear in the platform overview and the firmware details. Firmware lists,
 details and pickers use the firmware's own description. Missing descriptions leave list cells blank
@@ -185,14 +185,14 @@ availability and picker cancellation cannot change the result.
 ## Build, check and clean
 
 ```sh
-polyfw build led-demo --release
-polyfw build buzzer-demo --release
-polyfw build --all-firmwares --release
-polyfw fmt led-demo
-polyfw lint led-demo
-polyfw test led-demo
-polyfw verify --all-firmwares
-polyfw clean led-demo
+plfw build led-demo --release
+plfw build buzzer-demo --release
+plfw build --all-firmwares --release
+plfw fmt led-demo
+plfw lint led-demo
+plfw test led-demo
+plfw verify --all-firmwares
+plfw clean led-demo
 ```
 
 Builds run from the effective `working-dir` with explicit Platform `--target` and `--locked`. An explicit registry `bin` adds
@@ -244,19 +244,19 @@ Install [probe-rs](https://probe.rs/docs/getting-started/installation/) on `PATH
 probe access, then connect the board:
 
 ```sh
-polyfw probes
-polyfw build led-demo --release
-polyfw flash led-demo --release
-polyfw attach led-demo --release
+plfw probes
+plfw build led-demo --release
+plfw flash led-demo --release
+plfw attach led-demo --release
 # Or flash and start monitoring in one command:
-polyfw run led-demo --release
+plfw run led-demo --release
 ```
 
 To build and run the buzzer firmware instead:
 
 ```sh
-polyfw build buzzer-demo --release
-polyfw run buzzer-demo --release
+plfw build buzzer-demo --release
+plfw run buzzer-demo --release
 ```
 
 `run`, `flash` and `attach` use an existing ELF and **never build**. `attach` needs the ELF that
@@ -266,7 +266,7 @@ The four firmware hardware commands accept transient `--probe VID:PID[:SERIAL]`,
 `--connect-under-reset` options. Omitted probe/speed options are delegated to probe-rs. For example:
 
 ```sh
-polyfw run led-demo --release --probe VID:PID:SERIAL --speed 4000
+plfw run led-demo --release --probe VID:PID:SERIAL --speed 4000
 ```
 
 `run` delegates to `probe-rs run --verify`; `flash` uses `probe-rs download --verify --reset`.
@@ -291,12 +291,12 @@ settings follow the extension's
 Open the operating project root as the VS Code folder, then:
 
 ```sh
-polyfw select led-demo --release
-polyfw build
+plfw select led-demo --release
+plfw build
 ```
 
 The saved selection generates `Launch led-demo (release)` and `Attach led-demo (release)`
-in `.vscode/launch.json`. Running `polyfw select buzzer-demo --release` replaces them with
+in `.vscode/launch.json`. Running `plfw select buzzer-demo --release` replaces them with
 `Launch buzzer-demo (release)` and `Attach buzzer-demo (release)`. A selection without an explicit
 profile omits the name suffix and uses the debug ELF.
 
@@ -314,17 +314,17 @@ Set [`config.vscode.enabled = false`](configuration.md#choose-who-manages-vs-cod
 to retain a manually maintained launch file. Physical VS Code sessions and RTT delivery remain
 unverified; binary platform smoke tests do not verify these sessions.
 
-## Use polyfw in scripts and CI
+## Use plfw in scripts and CI
 
 Install a pinned published polyfw version and the consuming project's toolchains, targets,
 rustfmt and Clippy. From the project root, use explicit firmware scope:
 
 ```sh
-polyfw verify --all-firmwares
-polyfw build --all-firmwares --release
+plfw verify --all-firmwares
+plfw build --all-firmwares --release
 ```
 
-Use `polyfw info --firmware led-demo --json=2` when a script needs resolved paths. See
+Use `plfw info --firmware led-demo --json=2` when a script needs resolved paths. See
 [JSON format versions](#json-format-versions) for the compatibility contract.
 
 Build and check output includes numbered stages, status and elapsed time. Redirected output omits
@@ -340,12 +340,12 @@ colors and Unicode marks. `--color always` and `--color never` override automati
 | A command fails on an unrelated platform | Fix each registered firmware's working directory and Cargo configuration; most project commands validate the whole registry |
 | Platform consistency check fails | Inspect its declared target/CPU and Cargo flags; see [consistency checking](configuration.md#check-platform-consistency) |
 | Package has no library target | Add a host-testable library to the firmware package |
-| Multiple binary targets | Set the firmware's `bin` to a declared binary; `default-run` does not select it for polyfw |
-| Saved firmware removed or state malformed | Run `polyfw select led-demo` to replace it, or `polyfw select --clear` |
+| Multiple binary targets | Set the firmware's `bin` to a declared binary; `default-run` does not select it for `plfw` |
+| Saved firmware removed or state malformed | Run `plfw select led-demo` to replace it, or `plfw select --clear` |
 | Unexpected release/dev image | Inspect saved profile with `info`; use an explicit profile or save a new selection |
 | ELF missing | Run the reported build command for that firmware and profile |
 | Host lint/test tries to compile hardware code | Separate host-testable library code and configure target-specific binary/test compilation |
 | A local dependency is missing from checks | Inspect `info --firmware led-demo` and canonical directory-glob matching |
 | `--locked` fails | Update and commit the owning workspace's lockfile with Cargo |
-| Probe missing or ambiguous | Check `polyfw probes`, host permissions and the explicit `--probe` selector |
+| Probe missing or ambiguous | Check `plfw probes`, host permissions and the explicit `--probe` selector |
 | VS Code changes disappear | Disable launch generation before maintaining that file yourself |

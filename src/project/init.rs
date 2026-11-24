@@ -29,7 +29,7 @@ fn run(root: &Path) -> Result<InitReport> {
     let file = File::create_new(&path).map_err(|error| {
         if error.kind() == ErrorKind::AlreadyExists {
             format!(
-                "{} already exists; move or remove it before running polyfw init",
+                "{} already exists; move or remove it before running plfw init",
                 path.display()
             )
         } else {

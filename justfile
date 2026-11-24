@@ -26,7 +26,7 @@ test-lib:
 
 # Run binary unit tests and CLI integration tests.
 test-cli:
-    cargo test --locked --bin polyfw --test standalone --test project_root --test platforms
+    cargo test --locked --bin plfw --test standalone --test project_root --test platforms
 
 # Run the demo project tests with optional test harness arguments.
 [positional-arguments]
