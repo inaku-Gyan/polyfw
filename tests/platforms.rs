@@ -188,6 +188,52 @@ fn build_rejects_a_skipped_binary_even_when_an_old_executable_exists() {
     assert_eq!(fs::read(artifact).unwrap(), previous);
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn launch_paths_round_trip_literal_backslashes_in_linux_directories() {
+    let fixture = Project::new("backslash-output");
+    fixture.config(r#"target-dir = 'out\logs'"#, "", "");
+    let output_dir = fixture.project.join(r"out\logs");
+    let output = succeed(
+        support::workspace_cargo(&fixture.workspace)
+            .args([
+                "build",
+                "--locked",
+                "--offline",
+                "--target",
+                "host-tuple",
+                "-p",
+                "led-demo",
+                "--message-format=json",
+            ])
+            .env("CARGO_TARGET_DIR", &output_dir)
+            .output()
+            .unwrap(),
+    );
+    let executable = output
+        .stdout
+        .split(|byte| *byte == b'\n')
+        .filter_map(|line| serde_json::from_slice::<serde_json::Value>(line).ok())
+        .find_map(|message| message["executable"].as_str().map(PathBuf::from))
+        .expect("Cargo reported a built executable");
+    assert!(executable.starts_with(output_dir));
+    assert!(executable.is_file());
+
+    succeed(fixture.command(&["select", "led-demo"]).output().unwrap());
+    let info = fixture.info();
+    let artifact = &info["firmwares"]["led-demo"]["artifacts"]["dev"];
+    assert_eq!(artifact["exists"], true);
+    assert_eq!(Path::new(artifact["path"].as_str().unwrap()), executable);
+
+    let launch: serde_json::Value =
+        serde_json::from_slice(&fs::read(fixture.project.join(".vscode/launch.json")).unwrap())
+            .unwrap();
+    for entry in launch["configurations"].as_array().unwrap() {
+        let path = entry["coreConfigs"][0]["programBinary"].as_str().unwrap();
+        assert_eq!(Path::new(path), executable, "{}", entry["request"]);
+    }
+}
+
 #[test]
 fn omitted_working_directories_use_the_configuration_directory_and_allow_firmware_overrides() {
     let fixture = Project::new("working-defaults");

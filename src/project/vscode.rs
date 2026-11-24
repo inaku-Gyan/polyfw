@@ -7,9 +7,10 @@ use crate::cargo::runner::firmware_elf_path;
 pub(crate) const LAUNCH_FILE: &str = ".vscode/launch.json";
 
 pub(crate) fn configuration(selection: &Selection) -> Result<String> {
-    let elf = firmware_elf_path(selection, None)
-        .to_string_lossy()
-        .replace('\\', "/");
+    let elf_path = firmware_elf_path(selection, None);
+    let elf = elf_path.to_string_lossy();
+    #[cfg(windows)]
+    let elf = elf.replace('\\', "/");
     // Configuration fields follow the probe-rs extension's 0.32.0 schema.
     // https://github.com/probe-rs/vscode/blob/v0.32.0/package.json
     let configurations = [("launch", "Launch"), ("attach", "Attach")].map(|(request, label)| {
