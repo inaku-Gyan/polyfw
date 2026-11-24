@@ -21,8 +21,8 @@ check:
 
 # Measure coverage with the default-feature test suite and export HTML and LCOV.
 coverage:
-    cargo llvm-cov --locked --no-rustc-wrapper --remap-path-prefix --html --output-dir target/llvm-cov
-    cargo llvm-cov report --remap-path-prefix --lcov --output-path target/llvm-cov/lcov.info
+    cargo llvm-cov --locked --no-rustc-wrapper --remap-path-prefix --html --output-dir coverage
+    cargo llvm-cov report --remap-path-prefix --lcov --output-path coverage/lcov.info
 
 # Run library unit tests, API integration tests and doctests with default features disabled.
 test-lib:
@@ -43,9 +43,10 @@ fix:
     cargo fmt
     cargo clippy --locked --all-targets --fix --allow-dirty --allow-staged
 
-# Clean build artifacts and remove demo build directories.
+# Clean build artifacts, coverage reports and demo outputs.
 clean:
     cargo clean
+    rm -rf coverage
     rm -rf dist
     rm -rf demos/*/target
     rm -rf demos/*/.polyfw-state

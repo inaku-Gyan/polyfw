@@ -48,7 +48,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: coverage-html
-          path: target/llvm-cov/html/
+          path: coverage/html/
           if-no-files-found: error
 
       - name: Upload coverage to Codecov
@@ -57,7 +57,7 @@ jobs:
         continue-on-error: true
         with:
           use_oidc: true
-          files: target/llvm-cov/lcov.info
+          files: coverage/lcov.info
           disable_search: true
           fail_ci_if_error: true
 

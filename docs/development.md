@@ -147,9 +147,12 @@ just coverage
 ```
 
 `just coverage` runs the default-feature unit and integration tests, including the demo builds,
-and measures line coverage in `src/` on the host. Open `target/llvm-cov/html/index.html` to inspect
-individual files. The same run writes `target/llvm-cov/lcov.info` for Codecov. `just check` also
-checks the Rustdoc example and verifies the library with default features disabled.
+and measures line coverage in `src/` on the host. Open `coverage/html/index.html` to inspect
+individual files. The same run writes `coverage/lcov.info` for Codecov.
+
+The reports remain available after `cargo clean`. Use `just clean` to remove them along with build
+outputs. `just check` also checks the Rustdoc example and verifies the library with default
+features disabled.
 
 ## Maintain the examples
 

@@ -5,6 +5,7 @@ Thumbs.db
 
 # --- Artifacts --------------
 /target/
+/coverage/
 /dist/
 /.polyfw-state/
 
