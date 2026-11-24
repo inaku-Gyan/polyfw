@@ -465,7 +465,9 @@ fn multi_workspace_example_reports_external_members_and_shared_scopes() {
             assert_eq!(firmware[field], details["platforms"][platform][field]);
         }
         assert_eq!(
-            Path::new(firmware["manifest_path"].as_str().unwrap()),
+            Path::new(firmware["manifest_path"].as_str().unwrap())
+                .canonicalize()
+                .unwrap(),
             example
                 .root
                 .join("firmwares")
@@ -477,9 +479,13 @@ fn multi_workspace_example_reports_external_members_and_shared_scopes() {
             example.root.join("bsp").join(platform)
         );
         assert_eq!(firmware["working_dir"], firmware["workspace"]);
+        let target_dir = example.root.join("target/firmware").join(platform);
+        fs::create_dir_all(&target_dir).unwrap();
         assert_eq!(
-            Path::new(firmware["target_dir"].as_str().unwrap()),
-            example.root.join("target/firmware").join(platform)
+            Path::new(firmware["target_dir"].as_str().unwrap())
+                .canonicalize()
+                .unwrap(),
+            target_dir
         );
         let dependencies = firmware["local_dependencies"].as_array().unwrap();
         assert_eq!(

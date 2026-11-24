@@ -485,7 +485,9 @@ fn external_members_can_supply_the_working_directory_without_changing_workspace_
     assert_eq!(firmware["cpu"], "native");
     assert_eq!(firmware["chip"], "test-chip");
     assert_eq!(
-        Path::new(firmware["manifest_path"].as_str().unwrap()),
+        Path::new(firmware["manifest_path"].as_str().unwrap())
+            .canonicalize()
+            .unwrap(),
         manifest
     );
     assert_eq!(

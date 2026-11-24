@@ -24,12 +24,77 @@ pub(crate) fn workspace_command(workspace: &Path, program: &str) -> Command {
 pub(crate) fn cargo_command(context: &CargoContext) -> Command {
     let mut command = workspace_cargo(&context.working_dir);
     if let Some(directory) = &context.target_dir_override {
-        command.env("CARGO_TARGET_DIR", directory);
+        command.env("CARGO_TARGET_DIR", cargo_output_directory(directory));
     }
     if let Some(directory) = &context.build_dir_override {
-        command.env("CARGO_BUILD_BUILD_DIR", directory);
+        command.env("CARGO_BUILD_BUILD_DIR", cargo_output_directory(directory));
     }
     command
+}
+
+#[cfg(not(windows))]
+fn cargo_output_directory(directory: &Path) -> &Path {
+    directory
+}
+
+#[cfg(windows)]
+fn cargo_output_directory(directory: &Path) -> &Path {
+    // Leave room for an 8.3 child name within the legacy Win32 path limit.
+    const MAX_WIN32_DIRECTORY_LEN: usize = 260 - 12;
+
+    // MinGW can lose the directory of an object file passed with a verbatim path.
+    let Some(ordinary) = directory
+        .to_str()
+        .and_then(|path| path.strip_prefix(r"\\?\"))
+    else {
+        return directory;
+    };
+    let Some((drive, names)) = ordinary.split_once('\\') else {
+        return directory;
+    };
+    if !matches!(drive.as_bytes(), [b'A'..=b'Z' | b'a'..=b'z', b':'])
+        || ordinary.encode_utf16().count() > MAX_WIN32_DIRECTORY_LEN
+    {
+        return directory;
+    }
+    if names.is_empty()
+        || names
+            .strip_suffix('\\')
+            .unwrap_or(names)
+            .split('\\')
+            .all(is_regular_windows_name)
+    {
+        Path::new(ordinary)
+    } else {
+        directory
+    }
+}
+
+#[cfg(windows)]
+fn is_regular_windows_name(name: &str) -> bool {
+    if name.is_empty()
+        || name.starts_with(' ')
+        || name.ends_with([' ', '.'])
+        || name.contains(|c| {
+            matches!(
+                c,
+                '\0'..='\x1f' | '<' | '>' | ':' | '"' | '/' | '|' | '?' | '*'
+            )
+        })
+    {
+        return false;
+    }
+
+    // A DOS device name can precede a space or one or more extensions.
+    let stem = name.split('.').next().unwrap_or(name).trim_end_matches(' ');
+    let device_names = ["AUX", "CON", "CONIN$", "CONOUT$", "NUL", "PRN"];
+    !device_names
+        .iter()
+        .any(|device| stem.eq_ignore_ascii_case(device))
+        && !stem.split_at_checked(3).is_some_and(|(prefix, number)| {
+            (prefix.eq_ignore_ascii_case("COM") || prefix.eq_ignore_ascii_case("LPT"))
+                && (matches!(number.as_bytes(), [b'0'..=b'9']) || matches!(number, "¹" | "²" | "³"))
+        })
 }
 
 pub(crate) fn target_cargo(context: &CargoContext, platform: &Platform) -> Command {
@@ -235,6 +300,58 @@ mod tests {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(output.status.success(), "{stdout}\n{stderr}");
         assert!(stdout.contains("3 passed"), "{stdout}\n{stderr}");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn cargo_uses_ordinary_windows_paths_for_output_overrides() {
+        let context = CargoContext {
+            working_dir: PathBuf::from(r"\\?\C:\project"),
+            target_dir_override: Some(PathBuf::from(r"\\?\C:\project\firmware output")),
+            build_dir_override: Some(PathBuf::from(r"\\?\D:\build cache")),
+            ..CargoContext::default()
+        };
+        let command = cargo_command(&context);
+        assert_eq!(
+            command.get_current_dir(),
+            Some(context.working_dir.as_path())
+        );
+        for (key, expected) in [
+            ("CARGO_TARGET_DIR", r"C:\project\firmware output"),
+            ("CARGO_BUILD_BUILD_DIR", r"D:\build cache"),
+        ] {
+            let directory = command
+                .get_envs()
+                .find(|(name, _)| *name == key)
+                .and_then(|(_, value)| value);
+            assert_eq!(directory, Some(Path::new(expected).as_os_str()), "{key}");
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn cargo_preserves_paths_with_special_windows_semantics() {
+        let long = format!(r"\\?\C:\{}", "😀".repeat(123));
+        for name in [
+            r"C:\ordinary\output",
+            r"\\?\UNC\server\share\output",
+            r"\\?\Volume{01234567-89ab-cdef-0123-456789abcdef}\output",
+            r"\\.\COM1",
+            r"\\?\C:drive-relative",
+            r"\\?\C:\unresolved\..\output",
+            r"\\?\C:\literal.\output",
+            r"\\?\C:\literal \output",
+            r"\\?\C:\ literal\output",
+            r"\\?\C:\output\\cache",
+            r"\\?\C:\output/cache",
+            r"\\?\C:\output:stream",
+            r"\\?\C:\nul .tar.gz\output",
+            r"\\?\C:\LpT²\output",
+            &long,
+        ] {
+            let path = Path::new(name);
+            assert_eq!(cargo_output_directory(path).as_os_str(), path.as_os_str());
+        }
     }
 
     #[test]
