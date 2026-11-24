@@ -58,9 +58,9 @@ fixtures need `thumbv7em-none-eabihf`.
 
    `--allow-dirty` permits reviewing uncommitted preparation changes. The dry run builds the
    extracted crate without uploading. The actual publication uses a clean committed tree.
-   Source, README, license, embedded schema, self-contained Rust tests and the `docs/` guides are
-   included. The ARM examples and their `tests/demos.rs` integration test stay in the source
-   checkout and are excluded together from the crate. `Cargo.toml` defines the excluded files,
+   Source, README, changelog, license, embedded schema, self-contained Rust tests and the `docs/`
+   guides are included. The ARM examples and their `tests/demos.rs` integration test stay in the
+   source checkout and are excluded together from the crate. `Cargo.toml` defines the excluded files,
    including `docs/adr/` and `docs/research/`.
    Guide and README links use relative paths for offline reading.
 4. Commit the manifest, lockfile, generated schema and accompanying changes, then merge them
@@ -107,8 +107,8 @@ Rust suite runs on Linux through reusable CI; the five-platform binary matrix do
 physical probe/debugger validation.
 
 Archives are named `polyfw-<target>.tar.gz` or `polyfw-<target>.zip`. Each contains a directory
-`polyfw-<target>/` holding `polyfw` (Windows: `polyfw.exe`), `README.md`, `LICENSE` and `docs/`
-with the same guides included in the crate, excluding `docs/adr/` and `docs/research/`.
+`polyfw-<target>/` holding `polyfw` (`polyfw.exe` on Windows), `README.md`, `CHANGELOG.md`, `LICENSE`
+and `docs/` with the same guides included in the crate, excluding `docs/adr/` and `docs/research/`.
 The tag selects the version. Binstall metadata in `Cargo.toml` specifies this URL and executable
 layout. README and the bundled guides use relative links for offline reading. The executable can
 generate its matching schema; the schema file is not bundled in the binary archive. Editors can
@@ -127,6 +127,9 @@ The checksum manifest covers the archives downloaded from the build jobs; the bi
 provides the asset URL and layout. Build artifacts remain available for 14 days for manual recovery.
 
 ## Release notes
+
+Record user-visible changes and upgrade steps in the [changelog](../CHANGELOG.md) during
+version preparation.
 
 GitHub generates notes through its default release-notes comparison rules. The release title is
 the tag. Review or edit the generated notes on GitHub after publication.

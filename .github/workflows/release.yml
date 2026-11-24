@@ -99,7 +99,7 @@ jobs:
 
           stage="polyfw-$RELEASE_TARGET"
           mkdir "$stage" dist
-          cp "$binary" README.md LICENSE "$stage/"
+          cp "$binary" README.md CHANGELOG.md LICENSE "$stage/"
           cp -R docs "$stage/"
           rm -rf "$stage/docs/adr" "$stage/docs/research"
           if [[ "$RUNNER_OS" == Windows ]]; then

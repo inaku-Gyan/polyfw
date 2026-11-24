@@ -77,9 +77,9 @@ cargo install polyfw --locked
 ```
 
 [Release archives](https://github.com/inaku-Gyan/polyfw/releases) are available for Linux GNU
-and macOS on x86_64/aarch64, and Windows x86_64 MSVC. Each includes the executable, README, MIT
-license and guides. Verify the archive against `SHA256SUMS`, extract it and put the executable
-on `PATH`. See [release assets and build targets](docs/releasing.md#assets-and-build-targets)
+and macOS on x86_64/aarch64, and Windows x86_64 MSVC. Each includes the executable, README,
+changelog, MIT license and guides. Verify the archive against `SHA256SUMS`, extract it and put
+the executable on `PATH`. See [release assets and build targets](docs/releasing.md#assets-and-build-targets)
 for the build and test environments.
 
 <details>
@@ -167,6 +167,7 @@ For project loading, selection and process behavior, see [Rust library](docs/des
 | Explore the ARM integration-test projects | [Demos](https://github.com/inaku-Gyan/polyfw/tree/main/demos) |
 | Understand validation, dependency scopes and state management | [Design](docs/design.md) |
 | Develop polyfw and run checks | [Development](docs/development.md) |
+| Review changes by version | [Changelog](CHANGELOG.md) |
 | Prepare and publish a release | [Releasing](docs/releasing.md) |
 
 The guides ship with the crate and binary archives; relative links work offline with that version.
