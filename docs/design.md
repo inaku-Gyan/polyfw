@@ -101,6 +101,11 @@ leave inherited Cargo environment/configuration/defaults untouched. Relative dir
 start beside polyfw.toml, independently of each other; absolute and parent paths are supported.
 An omitted working-dir at both levels defaults to that project directory.
 
+On Windows, Cargo children receive explicit output overrides in ordinary drive-path syntax
+when it addresses the same directory. MinGW can then link host build scripts and proc macros
+using object files in those directories. Paths that require extended syntax keep their original
+form. See [Windows path naming](https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file).
+
 Target-side commands explicitly pass the Platform target. CPU injection appends to the inherited
 target-specific environment flags; Cargo merges string/array settings and applies its native
 source precedence, including global flag suppression and matching cfg flags. Host commands do
