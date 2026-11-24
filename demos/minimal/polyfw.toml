@@ -1,7 +1,7 @@
 #:schema ../../assets/polyfw.schema.json
 
-config-version = "0.2.0"
-min-polyfw-version = "0.2.0"
+config-version = "0.3.0"
+min-polyfw-version = "0.3.0"
 
 [config.vscode]
 enabled = false

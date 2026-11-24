@@ -11,6 +11,10 @@
 - `info --json` defaults to format 2. It reports `project_root`, declared platform targets,
   absolute manifest paths and artifacts keyed by profile. Use `info --json=1` for the previous
   field layout.
+  Its legacy `check_platform` field reports `false`.
+- The 0.3.0 configuration contract removes `check-platform`.
+  Cargo applies its native flag precedence for builds and target-side Clippy. See the
+  [configuration migration](docs/configuration.md#configuration-compatibility).
 
 ### Added
 

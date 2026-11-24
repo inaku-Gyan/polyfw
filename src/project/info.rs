@@ -61,7 +61,6 @@ pub struct FirmwareInfo {
     pub build_dir: Option<PathBuf>,
     /// Resolved target name used in Cargo's artifact directory layout.
     pub target: String,
-    pub check_platform: bool,
     pub artifacts: Vec<Artifact>,
     /// Present in the detailed firmware report.
     pub local_dependencies: Option<Vec<DependencyInfo>>,
@@ -179,11 +178,6 @@ impl ProjectInfo {
                     target_dir: selection.cargo.target_dir,
                     build_dir: selection.cargo.build_dir,
                     target: selection.cargo.target,
-                    check_platform: selection
-                        .firmware
-                        .check_platform
-                        .or(selection.platform.check_platform)
-                        .unwrap_or(true),
                     artifacts,
                     local_dependencies,
                 },
@@ -474,7 +468,7 @@ mod tests {
         .unwrap();
         fs::write(
             root.join("polyfw.toml"),
-            "config-version = \"0.2.0\"\nmin-polyfw-version = \"0.2.0\"\n[platforms.test]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/test\"\nworking-dir = \"platform/test\"\n\
+            "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.test]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/test\"\nworking-dir = \"platform/test\"\n\
              chip = \"test-chip\"\n\
              [firmwares.one]\ndescription = \"first firmware\"\nplatform = \"test\"\n\
              package = \"firmware-fw\"\n\

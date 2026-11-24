@@ -209,6 +209,8 @@ fn minimal_example_discovers_selects_and_builds_the_reported_artifact() {
     assert!(report.get("project_root").is_none());
     assert!(report["saved_selection"].is_null());
     assert_eq!(report["firmwares"]["hello"]["package"], "hello");
+    assert_eq!(report["firmwares"]["hello"]["check_platform"], false);
+    assert_eq!(report["platforms"]["dm-mc02"]["cpu"], "cortex-m7");
     for artifact in report["firmwares"]["hello"]["artifacts"]
         .as_array()
         .unwrap()

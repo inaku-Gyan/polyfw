@@ -1064,7 +1064,7 @@ mod tests {
         .unwrap();
         fs::write(
             root.join("polyfw.toml"),
-            "config-version = \"0.2.0\"\nmin-polyfw-version = \"0.2.0\"\n[platforms.firmware-family]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/firmware-family\"\nworking-dir = \"platform/test\"\n\
+            "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.firmware-family]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/firmware-family\"\nworking-dir = \"platform/test\"\n\
              chip = \"test\"\n\
              [firmwares.one]\ndescription = \"first firmware\"\n\
              platform = \"firmware-family\"\npackage = \"firmware-a\"\nbin = \"firmware-a\"\n\

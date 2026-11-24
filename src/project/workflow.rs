@@ -14,7 +14,7 @@ impl Project {
         let context = self.context.resolved()?;
         let selections = context.targets(target, profile, &mut options)?;
         let execution = process::run(
-            cargo_workflow::build(&selections)?,
+            cargo_workflow::build(&selections),
             options.output,
             options.progress,
         )?;
@@ -116,12 +116,7 @@ mod tests {
     }
 
     fn build(selections: &[Selection]) {
-        process::run(
-            cargo_workflow::build(selections).unwrap(),
-            OutputMode::Inherit,
-            None,
-        )
-        .unwrap();
+        process::run(cargo_workflow::build(selections), OutputMode::Inherit, None).unwrap();
     }
 
     #[test]
@@ -348,7 +343,7 @@ mod tests {
                     &selections,
                     false,
                 )),
-                "build" => cargo_workflow::build(&selections),
+                "build" => Ok(cargo_workflow::build(&selections)),
                 "fmt" => cargo_workflow::check(&root, &[], &selections, Check::Format),
                 "lint" => cargo_workflow::check(&root, &[], &selections, Check::Lint),
                 "test" => cargo_workflow::check(&root, &[], &selections, Check::Test),
@@ -794,7 +789,7 @@ mod tests {
             )
             .unwrap();
             let mut registry = String::from(
-                "config-version = \"0.2.0\"\nmin-polyfw-version = \"0.2.0\"\n[platforms.test-platform]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/test-platform\"\nworking-dir = \"platform/test\"\n\
+                "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.test-platform]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/test-platform\"\nworking-dir = \"platform/test\"\n\
              chip = \"test-chip\"\n\
                  [firmwares.test-firmware]\ndescription = \"test firmware\"\nplatform = \"test-platform\"\n\
                  package = \"test-firmware\"\n",

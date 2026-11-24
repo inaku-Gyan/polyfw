@@ -17,8 +17,6 @@ working-dir = "."
 # TODO: set the compilation target and CPU.
 target = "YOUR_TARGET"
 cpu = "YOUR_CPU"
-# Consistency checking defaults to true.
-# check-platform = false
 # Optional intermediate and final-output directory overrides:
 # build-dir = "target/build/your-platform"
 # target-dir = "target/firmware/your-firmware"

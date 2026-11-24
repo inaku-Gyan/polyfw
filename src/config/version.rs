@@ -6,9 +6,9 @@ use crate::{BoxError, InternalResult as Result};
 
 pub(crate) const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Raise only when the current implementation can no longer preserve older contracts.
-pub(crate) const MIN_SUPPORTED_CONFIG_VERSION: &str = "0.2.0";
+pub(crate) const MIN_SUPPORTED_CONFIG_VERSION: &str = "0.3.0";
 /// Conservative authoring guidance; raise when new configurations need a newer CLI.
-pub(crate) const MIN_REQUIRED_CLI_VERSION: &str = "0.2.0";
+pub(crate) const MIN_REQUIRED_CLI_VERSION: &str = "0.3.0";
 
 pub(crate) fn preflight(source: &str, path: &Path) -> Result<()> {
     let document: toml::Table = toml::from_str(source)

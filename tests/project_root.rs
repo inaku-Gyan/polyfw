@@ -31,7 +31,7 @@ fn firmware_paths_follow_explicit_platform_and_cpu_reporting_remains_declarative
     .unwrap();
     fs::write(
         root.join("polyfw.toml"),
-        "config-version = \"0.2.0\"\nmin-polyfw-version = \"0.2.0\"\n[platforms.model]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/model\"\nworking-dir = \".\"\nchip = \"test-chip\"\n\
+        "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.model]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/model\"\nworking-dir = \".\"\nchip = \"test-chip\"\n\
          [firmwares.firmware]\ndescription = \"Fixture\"\nplatform = \"model\"\n\
          package = \"application\"\n",
     )
@@ -138,8 +138,8 @@ fn cargo_commands_use_each_workspaces_pin_instead_of_the_tools_inherited_toolcha
     fs::write(firmware.join("src/main.rs"), "fn main() {}\n").unwrap();
     fs::write(
         firmware.join("polyfw.toml"),
-        "config-version = \"0.2.0\"\nmin-polyfw-version = \"0.2.0\"\n[config]\nlocal-dependencies = [\"../common\"]\n\
-             [platforms.model]\ntarget = \"host-tuple\"\ncpu = \"native\"\ncheck-platform = false\ntarget-dir = \"target/firmware/model\"\nworking-dir = \".\"\n\
+        "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[config]\nlocal-dependencies = [\"../common\"]\n\
+             [platforms.model]\ntarget = \"host-tuple\"\ncpu = \"native\"\ntarget-dir = \"target/firmware/model\"\nworking-dir = \".\"\n\
              chip = \"test-chip\"\n\
              [firmwares.firmware]\ndescription = \"Fixture\"\nplatform = \"model\"\n\
              package = \"firmware\"\n",
@@ -232,7 +232,7 @@ fn one_tool_keeps_two_projects_selections_and_debug_files_independent() {
         fs::write(project.join("src/main.rs"), "fn main() {}\n").unwrap();
         fs::write(
             project.join("polyfw.toml"),
-            "config-version = \"0.2.0\"\nmin-polyfw-version = \"0.2.0\"\n[platforms.model]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/model\"\nworking-dir = \".\"\n\
+            "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.model]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/model\"\nworking-dir = \".\"\n\
              chip = \"STM32H723VGTx\"\n\
              [firmwares.firmware]\ndescription = \"Fixture\"\nplatform = \"model\"\n\
              package = \"application\"\n",

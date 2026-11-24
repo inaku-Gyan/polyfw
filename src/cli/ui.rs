@@ -239,7 +239,6 @@ impl Ui {
                     .map(|directory| directory.display().to_string())
                     .unwrap_or_else(|| "not reported by Cargo".into()),
             ),
-            ("check-platform", firmware.check_platform.to_string()),
             ("target", platform.target.clone()),
             ("cpu", platform.cpu.clone()),
             ("chip", platform.chip.clone()),

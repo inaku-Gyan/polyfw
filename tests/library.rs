@@ -53,8 +53,8 @@ fn a_host_program_can_build_with_explicit_parameters_and_opt_into_saved_selectio
     fs::write(
         root.join("polyfw.toml"),
         r#"
-config-version = "0.2.0"
-min-polyfw-version = "0.2.0"
+config-version = "0.3.0"
+min-polyfw-version = "0.3.0"
 
 [platforms.host]
 target = "host-tuple"

@@ -142,7 +142,6 @@ Both format versions include these fields.
 | `firmwares[ID].description`, `.platform`, `.package`, `.bin` | Optional description, registry values and the resolved binary name |
 | `firmwares[ID].workspace`, `.working_dir` | Discovered Cargo workspace and actual invocation directory |
 | `firmwares[ID].target_dir`, `.build_dir` | Effective final/intermediate directories; `build_dir` is omitted if Cargo does not report it and no explicit override supplies it |
-| `firmwares[ID].check_platform` | Inherited consistency-check policy |
 
 Directory and artifact paths are absolute. Artifacts report the expected path and whether a file
 was present at that path when queried. Both views report dev, release and any different saved
@@ -172,6 +171,7 @@ in host checks. `target_clippy` identifies those included in target-side Clippy 
 | --- | --- |
 | `repository_root` | Absolute path to the directory containing `polyfw.toml` |
 | `firmwares[ID].target` | Resolved artifact target name |
+| `firmwares[ID].check_platform` | Legacy consistency-check policy, always `false` in 0.3.0 |
 | `firmwares[ID].artifacts` | Ordered `{profile, path, exists}` entries for dev, release and any different saved profile |
 | `firmwares[ID].local_dependencies` | Detail entries with `package`, `manifest_path` and `target` |
 
@@ -224,9 +224,7 @@ target/firmware/led-demo/thumbv7em-none-eabihf/release/led-demo
 target/firmware/buzzer-demo/thumbv7em-none-eabihf/release/buzzer-demo
 ```
 
-Build and target-side Clippy operations honor the inherited `check-platform` policy before
-compilation. See [platform consistency](configuration.md#check-platform-consistency) for its
-scope, unsupported configuration sources and silent opt-out.
+Builds and target-side Clippy use the [firmware target and Cargo flag precedence](configuration.md#configure-the-firmware-target).
 
 Absent, dev and test profiles use `debug`; release and bench use `release`; custom profiles use
 their own names. Define custom profiles in the consuming Cargo workspace.
@@ -338,7 +336,7 @@ colors and Unicode marks. `--color always` and `--color never` override automati
 | No `polyfw.toml` found | Run from the consuming project or pass `--project-root DIR` |
 | Configuration version missing or incompatible | Follow [configuration compatibility](configuration.md#configuration-compatibility); choose a compatible CLI or manually migrate the file |
 | A command fails on an unrelated platform | Fix each registered firmware's working directory and Cargo configuration; most project commands validate the whole registry |
-| Platform consistency check fails | Inspect its declared target/CPU and Cargo flags; see [consistency checking](configuration.md#check-platform-consistency) |
+| Unexpected CPU or missing linker flags | Review [Cargo flag precedence](configuration.md#configure-the-firmware-target) for the firmware's working directory |
 | Package has no library target | Add a host-testable library to the firmware package |
 | Multiple binary targets | Set the firmware's `bin` to a declared binary; `default-run` does not select it for `plfw` |
 | Saved firmware removed or state malformed | Run `plfw select led-demo` to replace it, or `plfw select --clear` |

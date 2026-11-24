@@ -154,16 +154,6 @@ pub(crate) fn same_context(left: &Selection, right: &Selection) -> bool {
     left.cargo == right.cargo
         && left.platform.target == right.platform.target
         && left.platform.cpu == right.platform.cpu
-        && left
-            .firmware
-            .check_platform
-            .or(left.platform.check_platform)
-            .unwrap_or(true)
-            == right
-                .firmware
-                .check_platform
-                .or(right.platform.check_platform)
-                .unwrap_or(true)
 }
 
 pub(crate) fn unique_contexts(selections: &[Selection]) -> Vec<&Selection> {

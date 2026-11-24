@@ -22,7 +22,6 @@ pub enum ErrorKind {
     StaleSelection,
     SelectionWrite,
     Cargo,
-    PlatformCheck,
     ProcessLaunch,
     ProcessFailed,
 }

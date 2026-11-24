@@ -110,13 +110,6 @@
             "null"
           ]
         },
-        "check-platform": {
-          "description": "Override platform consistency checking, including explicitly disabling it.",
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
         "description": {
           "description": "Optional human-readable label for firmware lists and the picker.\nOmission leaves the firmware without a description; it does not inherit the platform's.",
           "type": [
@@ -161,13 +154,6 @@
           "description": "Default intermediate/cache directory override (Cargo 1.91+). Omit at both levels\nto retain Cargo's configuration/environment defaults. Relative to `polyfw.toml`.",
           "type": [
             "string",
-            "null"
-          ]
-        },
-        "check-platform": {
-          "description": "Check effective target-side Cargo target/CPU before build and MCU Clippy. Defaults\nto true after Firmware inheritance. Mismatch or unverifiable settings are errors;\nfalse skips analysis silently. Excludes host work, wrappers and existing ELF files.",
-          "type": [
-            "boolean",
             "null"
           ]
         },

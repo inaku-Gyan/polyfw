@@ -6,10 +6,9 @@ use crate::config::model::Registry;
 use crate::process::Invocation;
 use crate::{CleanScope, Error, ErrorKind, Result, StageKind, StageTarget};
 
-use super::context::unique_contexts;
 use super::model::{FirmwareCargo, Selection};
+use super::runner;
 use super::scope::{self, PackageScope, WorkspaceScope};
-use super::{platform, runner};
 
 /// A Cargo checking workflow. Verification stops at the first failed stage.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -24,16 +23,8 @@ pub enum Check {
     Verify,
 }
 
-fn preflight(selections: &[Selection]) -> Result<()> {
-    for selection in unique_contexts(selections) {
-        platform::check(selection).map_err(|error| Error::new(ErrorKind::PlatformCheck, error))?;
-    }
-    Ok(())
-}
-
-pub(crate) fn build(selections: &[Selection]) -> Result<Vec<Invocation>> {
-    preflight(selections)?;
-    Ok(selections
+pub(crate) fn build(selections: &[Selection]) -> Vec<Invocation> {
+    selections
         .iter()
         .map(|selection| {
             let mut invocation = Invocation::new(
@@ -45,7 +36,7 @@ pub(crate) fn build(selections: &[Selection]) -> Result<Vec<Invocation>> {
             invocation.profile = selection.profile.clone();
             invocation
         })
-        .collect())
+        .collect()
 }
 
 pub(crate) fn clean(
@@ -102,9 +93,6 @@ pub(crate) fn check(
     selections: &[Selection],
     check: Check,
 ) -> Result<Vec<Invocation>> {
-    if matches!(check, Check::Lint | Check::Verify) {
-        preflight(selections)?;
-    }
     let scopes = scope::resolve(root, patterns, selections)
         .map_err(|error| Error::new(ErrorKind::Cargo, error))?;
     let stages = match check {

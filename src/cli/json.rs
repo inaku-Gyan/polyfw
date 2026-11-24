@@ -88,7 +88,6 @@ struct FirmwareV2<'a> {
     target: &'a str,
     cpu: &'a str,
     chip: &'a str,
-    check_platform: bool,
     artifacts: BTreeMap<&'a str, ArtifactV2<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     local_dependencies: Option<Vec<DependencyV2<'a>>>,
@@ -135,7 +134,7 @@ pub(crate) fn info_v1(report: &ProjectInfo) -> serde_json::Result<String> {
                     FirmwareV1 {
                         fields: firmware.into(),
                         target: &firmware.target,
-                        check_platform: firmware.check_platform,
+                        check_platform: false,
                         artifacts: firmware
                             .artifacts
                             .iter()
@@ -184,7 +183,6 @@ pub(crate) fn info_v2(report: &ProjectInfo) -> serde_json::Result<String> {
                         target: &platform.target,
                         cpu: &platform.cpu,
                         chip: &platform.chip,
-                        check_platform: firmware.check_platform,
                         artifacts: firmware
                             .artifacts
                             .iter()

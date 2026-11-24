@@ -103,11 +103,27 @@ Keep a lockfile for every workspace used by the checks; build, lint and test use
 
 ## Configure the firmware target
 
-Declare the compilation target and CPU in a Platform in `polyfw.toml`. polyfw passes an
-explicit `--target` for target-side build/check commands and appends the CPU to the target's
-`CARGO_TARGET_<TARGET>_RUSTFLAGS` environment value. Cargo merges the flags with its configuration.
-Keep runtime, linker, environment, feature and profile settings in the consuming Cargo project.
-CPU selection alone does not provide a runtime or memory layout.
+Declare one `target` per platform in `polyfw.toml`. polyfw passes it as `--target` for builds,
+target-side Clippy and package cleanup, overriding `CARGO_BUILD_TARGET` and Cargo's `build.target`.
+The resolved target also determines the ELF directory used by `info`, flashing and debugging.
+
+Set `cpu` to append `-Ctarget-cpu=…` to the inherited `CARGO_TARGET_<TARGET>_RUSTFLAGS` for
+target-side compilation. Cargo combines the target's file flags with that environment value,
+then adds matching `target.'cfg(...)'.rustflags`.
+rustc uses the target's default CPU when the selected flags leave it unspecified.
+
+Cargo uses the first applicable source of extra compiler flags in this order.
+
+1. `CARGO_ENCODED_RUSTFLAGS`, including an explicitly empty value.
+2. `RUSTFLAGS`, including an explicitly empty value.
+3. The combined flags for the target triple and matching `cfg(...)` entries. This includes
+   any CPU supplied by polyfw. A later `target-cpu` option can override an earlier one.
+4. `build.rustflags`, including `CARGO_BUILD_RUSTFLAGS`.
+
+For example, `RUSTFLAGS=-Dwarnings` supplies the extra compiler flags even when the platform
+declares a CPU. The injected target-specific flags take precedence over `build.rustflags`.
+Keep required linker flags with the target flags and the runtime and memory layout in the
+consuming Cargo project. [Cargo compiler flags](https://doc.rust-lang.org/cargo/reference/config.html#buildrustflags)
 
 Cargo discovers configuration and rustup selects a toolchain from the effective `working-dir`.
 Discovering a different workspace root does not change this directory. Workspace membership still
@@ -115,15 +131,9 @@ owns the lockfile and profiles. Packages outside their workspace directory are s
 Cargo declares them members; use Cargo's `package.workspace` setting when needed. A separate
 workspace registry or manifest field is unnecessary.
 
-Native flag precedence applies. `CARGO_ENCODED_RUSTFLAGS` and `RUSTFLAGS` can replace target flags,
-including the injected CPU; matching conditional target flags can also change the CPU. Introducing
-target flags suppresses lower-priority `build.rustflags`, as it does in Cargo. Keep required linker
-flags at the appropriate target level. `info` reports the declared Platform CPU; consistency
-checking is described [below](#check-platform-consistency).
-
 `host-tuple` resolves to Cargo's concrete host target. A custom JSON target uses its file stem for
 artifact lookup; a relative target-file argument follows Cargo's working-directory rules.
-Every Cargo child clears inherited `RUSTUP_TOOLCHAIN`, including metadata and configuration probes.
+Every Cargo child clears inherited `RUSTUP_TOOLCHAIN`, including metadata and toolchain queries.
 An outer `cargo +VERSION` therefore does not override the consuming project's toolchain.
 polyfw does not generate rust-analyzer settings; configure the editor through its native facilities.
 
@@ -172,10 +182,10 @@ files. Cargo output directories are configured independently. Customize the gene
 against the same platform:
 
 ```toml
-#:schema https://raw.githubusercontent.com/inaku-Gyan/polyfw/v0.2.0/assets/polyfw.schema.json
+#:schema https://raw.githubusercontent.com/inaku-Gyan/polyfw/v0.3.0/assets/polyfw.schema.json
 
-config-version = "0.2.0"
-min-polyfw-version = "0.2.0"
+config-version = "0.3.0"
+min-polyfw-version = "0.3.0"
 
 [config]
 local-dependencies = ["./**"]
@@ -190,7 +200,6 @@ cpu = "cortex-m7"
 chip = "STM32H723VGTx"
 working-dir = "."
 build-dir = "target/build/demo-board"
-# check-platform defaults to true.
 
 [firmwares.led-demo]
 description = "LED demo firmware"
@@ -219,7 +228,7 @@ At least one platform and one firmware are required.
 | `min-polyfw-version` | Yes | Minimum CLI release expected to interpret and execute this configuration correctly |
 | `platforms.ID.description` | No | Label shown in platform information; independent of firmware descriptions |
 | `platforms.ID.target` | Yes | Explicit compilation target, `host-tuple` or custom JSON target argument |
-| `platforms.ID.cpu` | Yes | Declared CPU supplied through target-specific rustflags |
+| `platforms.ID.cpu` | Yes | CPU appended to target-specific rustflags |
 | `platforms.ID.chip` | Yes | probe-rs chip name used by hardware commands and VS Code |
 | `firmwares.ID.description` | No | Label shown in firmware lists and the selector |
 | `firmwares.ID.platform` | Yes | ID of a platform in the same registry |
@@ -228,7 +237,6 @@ At least one platform and one firmware are required.
 | `platforms.ID.working-dir`, `firmwares.ID.working-dir` | No | Cargo invocation directory; firmware overrides platform, default `"."` beside `polyfw.toml` |
 | `platforms.ID.build-dir`, `firmwares.ID.build-dir` | No | Intermediate/cache directory override; requires Cargo 1.91+ when explicitly supplied |
 | `platforms.ID.target-dir`, `firmwares.ID.target-dir` | No | Final-output directory override |
-| `platforms.ID.check-platform`, `firmwares.ID.check-platform` | No | Effective target/CPU consistency check; firmware overrides platform, default `true` |
 | `config.local-dependencies` | No | Directory globs selecting reachable path dependencies for checks; default `["./**"]` |
 | `config.vscode.enabled` | No | Manage the entire `.vscode/launch.json` on selection save/clear; default `true` |
 
@@ -248,12 +256,11 @@ beside `polyfw.toml`, even when inherited; `working-dir` does not rebase either 
 Absolute paths and `..` can refer outside the polyfw project. The working directory must exist;
 Cargo manages creation of output directories.
 
-A Platform is independent of workspace ownership. Its required target and CPU do not guarantee
-complete cache equivalence: Cargo fingerprints also account for toolchains, flags, features and
-dependencies. Share `build-dir` to reuse compatible intermediates and choose distinct `target-dir`
-values when final images must coexist. Same-named binaries follow native Cargo behavior; no extra
-polyfw collision error or ELF copying is added. A shared final filename can be replaced by a later
-build. polyfw never inspects Cargo's private intermediate layout.
+A Platform is independent of workspace ownership. Cargo fingerprints account for toolchains, flags,
+features and dependencies even when firmwares share a platform. Share `build-dir` to reuse
+compatible intermediates and choose distinct `target-dir` values when final images must coexist.
+Cargo can replace a shared final filename in a later build. polyfw uses Cargo's public artifact
+layout to find the final images.
 
 The `#:schema` URL pins the release named by `config-version`, including patch and prerelease
 suffixes: for example, `0.2.0-rc.1` uses `v0.2.0-rc.1`. A newer compatible CLI can operate on
@@ -316,27 +323,6 @@ plfw build --all-firmwares --release
 Connect the firmware before running `plfw flash`. See [hardware commands](usage.md#flash-and-monitor)
 for probe selection and image freshness.
 
-## Check platform consistency
-
-`check-platform` defaults to `true`. Before `build` and the target-side Clippy stages of `lint` or
-`verify`, polyfw compares the selected firmware's effective Cargo target/CPU with its Platform.
-The comparison includes polyfw's explicit target and injected CPU, plus Cargo environment flag
-precedence. A different Cargo `build.target` default is harmless when the explicit target wins.
-The CPU comparison uses the last explicit CPU option, including a literal `native` value.
-
-A mismatch or inability to verify reliably is an error. The current checker supports ordinary
-target-specific string/array flags and environment overrides. It reports configuration includes,
-conditional target sections, profile/unstable configuration sources and rustflags response files
-as unverifiable, rather than approximating their effect. Missing explicit CPU flags are also
-unverifiable; compiler-default CPU equivalence is not inferred. Set `check-platform = false` on a
-Platform or Firmware to skip this analysis silently and let Cargo handle those configurations.
-A Firmware's explicit `false` overrides a Platform's `true`.
-
-Checking covers target-side compilation and its dependencies, including cached builds. It does
-not inspect custom compiler/wrapper internals or identify the contents of an existing ELF. Host
-tests, build scripts and proc macros are excluded. `info`, `fmt`, `test`, `clean` and hardware
-commands do not trigger it. `info` continues to show the declared CPU even when checking is off.
-
 ## Configuration compatibility
 
 Both top-level version declarations are required, even when the optional `config` tables are
@@ -346,7 +332,7 @@ follows; it is neither the firmware package version nor the last CLI that ran on
 `min-polyfw-version` is the oldest CLI expected to interpret and execute the configuration
 correctly. Neither declaration changes merely because the operating CLI is upgraded.
 
-The current configuration floor and conservative minimum CLI recommendation are both `0.2.0`.
+The current configuration floor and conservative minimum CLI recommendation are both `0.3.0`.
 Each CLI compares version precedence, ignoring build metadata, and requires all three conditions:
 
 ```text
@@ -357,8 +343,8 @@ min-polyfw-version <= CLI.version
 
 A newer CLI can read an older configuration while that contract remains supported. An older CLI
 can also read a newer contract when the file's minimum CLI allows it and the remaining content
-passes validation. For example, a hypothetical `config-version = "0.3.0"` with
-`min-polyfw-version = "0.2.0"` allows CLI `0.2.0` when the file uses only behavior that CLI
+passes validation. For example, a hypothetical `config-version = "0.4.0"` with
+`min-polyfw-version = "0.3.0"` allows CLI `0.3.0` when the file uses only behavior that CLI
 understands. A version declaration does not make unknown fields or invalid values acceptable.
 
 Missing declarations, invalid versions, inconsistent declarations and incompatible versions
@@ -367,6 +353,10 @@ actions. Errors identify the file and relevant versions. Select a compatible CLI
 migrate the configuration; changing a version string alone does not migrate its contents.
 There is no automatic migration, bypass or inferred version for existing files. Help, version,
 `schema` and `probes` keep their [project-free behavior](usage.md#choose-a-project).
+
+When migrating from 0.2.0, remove `check-platform` from each platform and firmware that sets it.
+Set both version declarations to `"0.3.0"` and update the Schema directive to the matching
+release. See [firmware target configuration](#configure-the-firmware-target) for flag precedence.
 
 For an existing file without declarations, review its fields and their meanings against the
 chosen release's guide, then add both declarations at the file's top level and align the editor

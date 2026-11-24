@@ -58,7 +58,7 @@ use the consuming workspaces' pins rather than inheriting the compiler used to r
 | `src/config/` | Configuration model, Schema, version preflight and dependency path patterns |
 | `src/project/` | Project discovery, queries, workflows, selection state and editor files |
 | `src/project/init.rs`, `assets/polyfw.toml` | Configuration template and exclusive initialization |
-| `src/cargo/` | Cargo context and metadata, consistency checks, dependency scopes, stage planning and ELF paths |
+| `src/cargo/` | Cargo context and metadata, dependency scopes, stage planning and ELF paths |
 | `src/process.rs` | Stage execution, progress and child output |
 | `tests/library.rs` | Public Rust API exercised as a downstream caller |
 | `tests/project_root.rs`, `tests/standalone.rs` | Executable-level project isolation and external-tool boundaries |

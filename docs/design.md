@@ -9,15 +9,14 @@ observable command behavior.
 | Owner | Responsibility |
 | --- | --- |
 | Consuming project | Firmware packages, platform declarations, Cargo configuration, Rust pins, profiles and sources |
-| polyfw | Registry validation, directory inheritance, firmware/profile selection, consistency checks, check planning, artifact lookup and process orchestration |
+| polyfw | Registry validation, directory inheritance, firmware/profile selection, check planning, artifact lookup and process orchestration |
 | Cargo and rustup | Workspace membership, configuration merging, fingerprints, compilation, tests and toolchain selection |
 | probe-rs | Probe access, flashing, reset and RTT sessions |
 | VS Code extension | Debug sessions using polyfw's generated launch configuration |
 
-A Firmware is a selectable software entry bound to one Platform. A Platform declares target,
-CPU and chip, and may provide defaults for the working/intermediate/final-output directories
-and consistency checking. Workspace means Cargo workspace; there is no separately registered
-workspace identity. A Board is physical hardware.
+A Firmware is a selectable software entry bound to one Platform. A Platform declares a target,
+CPU and chip and may supply default working, intermediate and final-output directories.
+Workspace means Cargo workspace. A Board is physical hardware.
 
 ## Rust library
 
@@ -68,8 +67,7 @@ Loading has two stages:
 
 Most commands resolve every registered firmware. Clearing selection only loads configuration and
 does not parse old state. Reset also uses configuration alone unless saving selection must generate
-an editor launch file. Dependency graphs are loaded for checks and detailed info. Platform
-consistency checking is a separate selected-build/target-lint preflight, not registry loading.
+an editor launch file. Dependency graphs are loaded for checks and detailed info.
 
 Cargo validation requires a library and at least one binary, counting feature-gated binaries
 independently of default-run. An omitted bin is resolved for artifact lookup while remaining absent
@@ -82,9 +80,8 @@ compatibility rules, Schema policy and manual migration. `config::version` owns 
 and the two release-maintained baselines. Version preflight runs before strict deserialization,
 Cargo, state writes and hardware; malformed TOML still precedes the version gate.
 
-The 0.2.0 contract raises both baselines to 0.2.0. Older contracts are retained only while their
-meaning remains intact, without aliases or historical parsers. Firmware/Platform renaming applies
-to configuration, CLI, JSON and saved state; the saved-state location remains the same.
+The runtime uses one parser for supported configuration contracts. An incompatible contract change
+advances the oldest supported version.
 
 ## Workspace and compiler isolation
 
@@ -106,26 +103,10 @@ when it addresses the same directory. MinGW can then link host build scripts and
 using object files in those directories. Paths that require extended syntax keep their original
 form. See [Windows path naming](https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file).
 
-Target-side commands explicitly pass the Platform target. CPU injection appends to the inherited
-target-specific environment flags; Cargo merges string/array settings and applies its native
-source precedence, including global flag suppression and matching cfg flags. Host commands do
-not inject Platform CPU and explicitly select host-tuple. Cargo's host alias resolves through
-that consuming Cargo's host identity; custom target JSON filenames determine artifact stems.
-
-## Platform consistency checking
-
-`cargo::platform` runs the enabled check-platform preflight before selected builds and target
-Clippy. Firmware overrides Platform, including false; the final default is true. It analyzes the
-same child environment after polyfw's CPU/directory overrides, with the explicit compilation
-target. Last explicit CPU mismatch, absent determinable CPU, response files or unsupported
-configuration sources produce actionable errors. See the [supported boundary](configuration.md#check-platform-consistency).
-
-The checker guards unsupported sources before invoking the pinned reader, preventing its hidden
-cfg subprocesses from bypassing the runner boundary. Disabled checking performs no configuration
-analysis or comparison. Native Cargo always executes with its own settings. Reporting uses declared
-Platform CPU and actual Cargo directory/artifact paths, without claiming an effective CPU.
-This contract concerns Cargo configuration; custom compiler/wrapper internals and existing ELF
-contents are outside it. Cached builds still receive the preflight without forcing compilation.
+Target-side commands pass the Platform target and use `target_cargo` to inject the CPU.
+Cargo resolves [the effective flags](configuration.md#configure-the-firmware-target). Host lint and
+tests explicitly select `host-tuple` and inherit Cargo's host flags. Cargo resolves its host alias
+in the consuming toolchain. Custom target JSON filenames determine artifact target names.
 
 ## Check planning
 
@@ -141,7 +122,7 @@ Canonical manifests identify packages, keeping identical package names in differ
 
 Metadata caches retain execution contexts rather than only workspace roots. Ownership mappings
 come from metadata.workspace_root, never from the invocation directory. MCU scopes preserve
-compilation target/CPU, directory context and consistency policy. Host and formatting scopes
+compilation target, CPU and directory context. Host and formatting scopes
 deduplicate by their actual execution/directory context. Other-workspace dependencies use their
 own workspace root and native directories, even if another firmware registers that workspace.
 
@@ -171,7 +152,7 @@ not Platform identity alone, decide reuse.
 Single-firmware clean delegates package cleanup with firmware and host targets using Cargo's
 default profile rules. All-firmware clean deduplicates directory contexts and delegates full
 cleanup; shared directories can include unregistered/manual outputs. No Platform isolation is
-inferred. Neither operation performs platform consistency checking.
+inferred.
 
 ## Selection and editor writes
 

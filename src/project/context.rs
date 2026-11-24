@@ -229,7 +229,7 @@ mod tests {
         fs::write(workspace.join("src/main.rs"), "fn main() {}\n").unwrap();
         fs::write(
             root.join(REGISTRY_FILE),
-            "config-version = \"0.2.0\"\nmin-polyfw-version = \"0.2.0\"\n[platforms.test]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/test\"\nworking-dir = \"platform/test\"\n\
+            "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.test]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/test\"\nworking-dir = \"platform/test\"\n\
              chip = \"test-chip\"\n\
              [firmwares.test-firmware]\ndescription = \"test firmware\"\nplatform = \"test\"\n\
              package = \"test-firmware\"\n",
@@ -261,7 +261,7 @@ mod tests {
         .unwrap();
         fs::write(workspace.join("src/lib.rs"), "#![forbid(unsafe_code)]\n").unwrap();
         fs::write(workspace.join("src/main.rs"), "fn main() {}\n").unwrap();
-        let source = "config-version = \"0.2.0\"\nmin-polyfw-version = \"0.2.0\"\n[platforms.test]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/test\"\nworking-dir = \"platform/test\"\n\
+        let source = "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.test]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/test\"\nworking-dir = \"platform/test\"\n\
              chip = \"test-chip\"\n\
              [firmwares.test-firmware]\ndescription = \"test firmware\"\nplatform = \"test\"\n\
              package = \"test-firmware\"\n";
@@ -341,7 +341,7 @@ mod tests {
         fs::write(workspace.join("src/lib.rs"), "#![forbid(unsafe_code)]\n").unwrap();
         fs::write(workspace.join("src/main.rs"), "fn main() {}\n").unwrap();
         fs::write(workspace.join("src/bin/robot-image.rs"), "fn main() {}\n").unwrap();
-        let source = "config-version = \"0.2.0\"\nmin-polyfw-version = \"0.2.0\"\n[platforms.test]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/test\"\nworking-dir = \"platform/test\"\n\
+        let source = "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.test]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/test\"\nworking-dir = \"platform/test\"\n\
              chip = \"test-chip\"\n\
              [firmwares.test-firmware]\ndescription = \"test firmware\"\nplatform = \"test\"\n\
              package = \"test-firmware\"\n";
@@ -398,7 +398,7 @@ mod tests {
             )
             .unwrap();
         }
-        let source = "config-version = \"0.2.0\"\nmin-polyfw-version = \"0.2.0\"\n[platforms.first-family]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/first-family\"\nworking-dir = \"platform/test\"\n\
+        let source = "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.first-family]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/first-family\"\nworking-dir = \"platform/test\"\n\
              chip = \"test\"\n\
              [platforms.second-family]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/second-family\"\nworking-dir = \"platform/test\"\n\
              chip = \"test\"\n\
@@ -461,7 +461,7 @@ mod tests {
         fs::write(workspace.join("firmware/src/main.rs"), "fn main() {}\n").unwrap();
 
         let mut registry: Registry = toml::from_str(
-            "config-version = \"0.2.0\"\nmin-polyfw-version = \"0.2.0\"\n[platforms.test]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/test\"\nworking-dir = \"platform/test\"\n\
+            "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.test]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/test\"\nworking-dir = \"platform/test\"\n\
              chip = \"test-chip\"\n\
              [firmwares.test-firmware]\ndescription = \"test firmware\"\nplatform = \"test\"\n\
              package = \"test-firmware\"\n",
@@ -530,24 +530,24 @@ mod tests {
     #[test]
     fn dependency_patterns_default_to_the_project_and_invalid_patterns_fail_before_cargo() {
         let registry: Registry = toml::from_str(
-            "config-version = \"0.2.0\"\nmin-polyfw-version = \"0.2.0\"\nplatforms = {}\nfirmwares = {}\n",
+            "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\nplatforms = {}\nfirmwares = {}\n",
         )
         .unwrap();
         assert_eq!(registry.config.local_dependencies, ["./**"]);
         let registry: Registry =
-            toml::from_str("config-version = \"0.2.0\"\nmin-polyfw-version = \"0.2.0\"\nplatforms = {}\nfirmwares = {}\n[config]\nlocal-dependencies = []\n").unwrap();
+            toml::from_str("config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\nplatforms = {}\nfirmwares = {}\n[config]\nlocal-dependencies = []\n").unwrap();
         assert!(registry.config.local_dependencies.is_empty());
         for value in ["42", "\"shared/**\"", "[42]"] {
             assert!(
                 toml::from_str::<Registry>(&format!(
-                    "config-version = \"0.2.0\"\nmin-polyfw-version = \"0.2.0\"\nplatforms = {{}}\nfirmwares = {{}}\n[config]\nlocal-dependencies = {value}\n"
+                    "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\nplatforms = {{}}\nfirmwares = {{}}\n[config]\nlocal-dependencies = {value}\n"
                 ))
                 .is_err()
             );
         }
         for pattern in ["[", "shared/**suffix", "*/../shared"] {
             let registry: Registry = toml::from_str(&format!(
-                "config-version = \"0.2.0\"\nmin-polyfw-version = \"0.2.0\"\nplatforms = {{}}\nfirmwares = {{}}\n[config]\nlocal-dependencies = [{pattern:?}]\n"
+                "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\nplatforms = {{}}\nfirmwares = {{}}\n[config]\nlocal-dependencies = [{pattern:?}]\n"
             ))
             .unwrap();
             let error = registry
@@ -571,12 +571,12 @@ mod tests {
             "[config.vscode]\nenabled = true\n",
         ] {
             let registry: Registry =
-                toml::from_str(&format!("config-version = \"0.2.0\"\nmin-polyfw-version = \"0.2.0\"\nplatforms = {{}}\nfirmwares = {{}}\n{config}")).unwrap();
+                toml::from_str(&format!("config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\nplatforms = {{}}\nfirmwares = {{}}\n{config}")).unwrap();
             assert_eq!(registry.config.local_dependencies, ["./**"]);
             assert!(registry.config.vscode.enabled);
         }
         let registry: Registry = toml::from_str(
-            "config-version = \"0.2.0\"\nmin-polyfw-version = \"0.2.0\"\nplatforms = {}\nfirmwares = {}\n[config]\nlocal-dependencies = []\n\
+            "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\nplatforms = {}\nfirmwares = {}\n[config]\nlocal-dependencies = []\n\
              [config.vscode]\nenabled = false\n",
         )
         .unwrap();
@@ -594,7 +594,7 @@ mod tests {
             "[config.vscode]\nenable = false\n",
         ] {
             assert!(
-                toml::from_str::<Registry>(&format!("config-version = \"0.2.0\"\nmin-polyfw-version = \"0.2.0\"\nplatforms = {{}}\nfirmwares = {{}}\n{config}"))
+                toml::from_str::<Registry>(&format!("config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\nplatforms = {{}}\nfirmwares = {{}}\n{config}"))
                     .is_err(),
                 "{config}"
             );

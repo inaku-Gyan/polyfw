@@ -377,7 +377,7 @@ fn configuration_versions_are_checked_before_tools_state_and_unknown_fields() {
         ),
         (
             "old-config",
-            "config-version = \"0.0.0\"\nmin-polyfw-version = \"0.0.0\"\n",
+            "config-version = \"0.2.0\"\nmin-polyfw-version = \"0.2.0\"\n",
             "is too old",
         ),
         (
@@ -565,7 +565,7 @@ impl Fixture {
         fs::write(
             self.root.join("polyfw.toml"),
             format!(
-                "config-version = \"0.2.0\"\nmin-polyfw-version = \"0.2.0\"\n[config.vscode]\nenabled = {vscode}\n\
+                "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[config.vscode]\nenabled = {vscode}\n\
                  [platforms.model]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/model\"\nworking-dir = \"missing\"\nchip = \"test-chip\"\n\
                  [firmwares.firmware]\ndescription = \"Fixture\"\nplatform = \"model\"\n\
                  package = \"application\"\n"

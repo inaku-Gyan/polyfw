@@ -101,7 +101,7 @@ impl Project {
 
     fn config(&self, platform: &str, led: &str, buzzer: &str) {
         fs::write(self.project.join("polyfw.toml"), format!(
-            "config-version = \"0.2.0\"\nmin-polyfw-version = \"0.2.0\"\n\
+            "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n\
              [platforms.demo-board]\ntarget = \"host-tuple\"\ncpu = \"native\"\nchip = \"test-chip\"\nworking-dir = \"../workspace\"\n{platform}\n\
              [firmwares.led-demo]\ndescription = \"LED\"\nplatform = \"demo-board\"\npackage = \"led-demo\"\n{led}\n\
              [firmwares.buzzer-demo]\ndescription = \"Buzzer\"\nplatform = \"demo-board\"\npackage = \"buzzer-demo\"\n{buzzer}\n"
@@ -300,7 +300,6 @@ fn directory_inheritance_and_native_defaults_use_cargos_actual_workspace_and_out
                 .unwrap(),
             output
         );
-        assert_eq!(firmware["check_platform"], true);
     }
     fixture.config("", "", "");
     fs::write(
@@ -346,82 +345,113 @@ fn directory_inheritance_and_native_defaults_use_cargos_actual_workspace_and_out
 }
 
 #[test]
-fn consistency_defaults_to_true_and_false_overrides_without_analyzing_unselected_firmware() {
-    let fixture = Project::new("checking");
-    let output = fixture
-        .command(&["build", "led-demo"])
-        .env("RUSTFLAGS", "-Ctarget-cpu=polyfw-mismatched-cpu")
-        .output()
-        .unwrap();
-    assert!(!output.status.success());
-    assert!(
-        String::from_utf8_lossy(&output.stderr).contains("effective CPU \"polyfw-mismatched-cpu\"")
-    );
-    let output = fixture
-        .command(&["build", "led-demo"])
-        .env("CARGO_ENCODED_RUSTFLAGS", "")
-        .output()
-        .unwrap();
-    assert!(!output.status.success());
-    assert!(
-        String::from_utf8_lossy(&output.stderr)
-            .contains("cannot determine an explicit effective target CPU")
-    );
-    fixture.config("check-platform = true", "check-platform = false", "");
-    let output = succeed(
-        fixture
-            .command(&["build", "led-demo"])
-            .env("CARGO_ENCODED_RUSTFLAGS", "")
+fn cargo_selects_the_native_flag_source_and_appends_the_declared_cpu_to_target_flags() {
+    let fixture = Project::new("flag-precedence");
+    let version = succeed(
+        support::workspace_cargo(&fixture.workspace)
+            .arg("-vV")
             .output()
             .unwrap(),
     );
-    assert!(!String::from_utf8_lossy(&output.stderr).contains("consistency check"));
-    assert_eq!(
-        fixture.info()["firmwares"]["led-demo"]["check_platform"],
-        false
-    );
-    assert_eq!(
-        fixture.info()["firmwares"]["buzzer-demo"]["check_platform"],
-        true
-    );
-    fixture.config("check-platform = false", "check-platform = true", "");
-    let output = fixture
-        .command(&["build", "led-demo"])
-        .env("RUSTFLAGS", "")
-        .output()
+    let version = String::from_utf8(version.stdout).unwrap();
+    let host = version
+        .lines()
+        .find_map(|line| line.strip_prefix("host: "))
         .unwrap();
-    assert!(!output.status.success());
-    succeed(
-        fixture
-            .command(&["test", "led-demo"])
-            .env("RUSTFLAGS", "")
-            .output()
-            .unwrap(),
+    fs::write(
+        fixture.workspace.join(".cargo/config.toml"),
+        format!(
+            "[build]\ntarget = \"polyfw-file-target\"\nrustflags = \"--cfg from_build\"\n\
+             [target.{host:?}]\nrustflags = [\"--cfg\", \"from_file\"]\n\
+             [target.'cfg(all())']\nrustflags = \"--cfg from_cfg\"\n"
+        ),
+    )
+    .unwrap();
+    fs::write(
+        fixture.workspace.join("led-demo/build.rs"),
+        r#"fn main() {
+    let flags = std::env::var("CARGO_ENCODED_RUSTFLAGS").unwrap_or_default();
+    let expected = std::env::var("POLYFW_EXPECTED_RUSTFLAGS").unwrap();
+    assert_eq!(flags, expected);
+    println!("cargo::rerun-if-env-changed=POLYFW_EXPECTED_RUSTFLAGS");
+}
+"#,
+    )
+    .unwrap();
+    let flag_key = format!(
+        "CARGO_TARGET_{}_RUSTFLAGS",
+        host.replace(['-', '.'], "_").to_uppercase()
+    );
+    let build = |environment: &[(&str, &str)], expected: &[&str]| {
+        succeed(
+            fixture
+                .command(&["build", "led-demo"])
+                .env("CARGO_BUILD_TARGET", "polyfw-env-target")
+                .env(&flag_key, "--cfg from_env -Ctarget-cpu=generic")
+                .envs(environment.iter().copied())
+                .env("POLYFW_EXPECTED_RUSTFLAGS", expected.join("\x1f"))
+                .output()
+                .unwrap(),
+        );
+    };
+    build(
+        &[],
+        &[
+            "--cfg",
+            "from_file",
+            "--cfg",
+            "from_env",
+            "-Ctarget-cpu=generic",
+            "-Ctarget-cpu=native",
+            "--cfg",
+            "from_cfg",
+        ],
+    );
+    build(
+        &[("RUSTFLAGS", "--cfg global_flags")],
+        &["--cfg", "global_flags"],
+    );
+    build(
+        &[
+            ("RUSTFLAGS", "--cfg global_flags"),
+            ("CARGO_ENCODED_RUSTFLAGS", ""),
+        ],
+        &[],
     );
 }
 
 #[test]
-fn disabled_checking_leaves_includes_and_conditional_flags_to_native_cargo() {
+fn cargo_applies_includes_and_conditional_flags_to_builds_and_target_checks() {
     let fixture = Project::new("native-config");
-    fs::write(fixture.workspace.join(".cargo/config.toml"), "include = [\"flags.toml\"]\n[target.'cfg(all())']\nrustflags = [\"--cfg\", \"conditional_flags\"]\n").unwrap();
     fs::write(
-        fixture.workspace.join(".cargo/flags.toml"),
-        "[build]\nrustflags = \"--cfg suppressed_build_flags\"\n",
+        fixture.workspace.join(".cargo/config.toml"),
+        "include = [\"flags.toml\"]\n",
     )
     .unwrap();
-    for name in ["led-demo", "buzzer-demo"] {
-        fs::write(fixture.workspace.join(name).join("src/lib.rs"), "#[cfg(not(conditional_flags))]\ncompile_error!(\"native conditional flags were lost\");\npub fn value() -> bool { true }\n").unwrap();
+    fs::write(
+        fixture.workspace.join(".cargo/flags.toml"),
+        "[target.'cfg(all())']\nrustflags = [\"--cfg\", \"conditional_flags\"]\n",
+    )
+    .unwrap();
+    fs::write(fixture.workspace.join("led-demo/src/lib.rs"), "#![allow(unexpected_cfgs)]\n#[cfg(not(conditional_flags))]\ncompile_error!(\"native conditional flags were lost\");\npub fn value() -> bool { true }\n").unwrap();
+    for command in ["build", "lint"] {
+        succeed(fixture.command(&[command, "led-demo"]).output().unwrap());
     }
-    let output = fixture.command(&["build", "led-demo"]).output().unwrap();
-    assert!(!output.status.success());
-    assert!(
-        String::from_utf8_lossy(&output.stderr)
-            .contains("cannot reliably verify configuration includes"),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    fixture.config("check-platform = true", "check-platform = false", "");
-    succeed(fixture.command(&["build", "led-demo"]).output().unwrap());
+}
+
+#[test]
+fn check_platform_is_rejected_in_platform_and_firmware_configuration() {
+    let fixture = Project::new("removed-field");
+    for (platform, led) in [
+        ("check-platform = true", ""),
+        ("", "check-platform = false"),
+    ] {
+        fixture.config(platform, led, "");
+        let output = fixture.command(&["info"]).output().unwrap();
+        assert!(!output.status.success());
+        let error = String::from_utf8(output.stderr).unwrap();
+        assert!(error.contains("unknown field `check-platform`"), "{error}");
+    }
 }
 
 #[test]

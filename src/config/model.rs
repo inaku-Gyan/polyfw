@@ -117,11 +117,6 @@ pub(crate) struct Platform {
     /// Relative to `polyfw.toml`, independently of `working-dir`.
     #[serde(rename = "target-dir")]
     pub(crate) target_dir: Option<String>,
-    /// Check effective target-side Cargo target/CPU before build and MCU Clippy. Defaults
-    /// to true after Firmware inheritance. Mismatch or unverifiable settings are errors;
-    /// false skips analysis silently. Excludes host work, wrappers and existing ELF files.
-    #[serde(rename = "check-platform")]
-    pub(crate) check_platform: Option<bool>,
 }
 
 /// A selectable software entry referring to one platform and Cargo package.
@@ -148,7 +143,4 @@ pub(crate) struct Firmware {
     /// Final-output directory overriding the platform; relative to `polyfw.toml`.
     #[serde(rename = "target-dir")]
     pub(crate) target_dir: Option<String>,
-    /// Override platform consistency checking, including explicitly disabling it.
-    #[serde(rename = "check-platform")]
-    pub(crate) check_platform: Option<bool>,
 }
