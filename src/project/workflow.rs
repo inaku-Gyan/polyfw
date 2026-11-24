@@ -552,7 +552,7 @@ mod tests {
             .platforms
             .get_mut("test-platform")
             .unwrap()
-            .cpu = "native".into();
+            .cpu = Some("native".into());
         context.resolve_cargo().unwrap();
         let mut selection = context.selection("test-firmware").unwrap();
         selection.profile = Some("bench-debug".parse().unwrap());
@@ -981,7 +981,7 @@ mod tests {
                         working_dir: Some("platform/test".into()),
                         target_dir: Some("target/firmware/test-platform".into()),
                         target: "thumbv7em-none-eabihf".into(),
-                        cpu: "cortex-m7".into(),
+                        cpu: Some("cortex-m7".into()),
                         chip: "test-chip".into(),
                         ..Platform::default()
                     },

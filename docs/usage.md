@@ -108,7 +108,7 @@ plfw info --firmware buzzer-demo --json=2 > buzzer-demo.json
 
 The overview lists all firmwares, their referenced platforms, the saved selection, and dev/release ELF
 presence. A different saved profile adds another artifact column. Details show one firmware's
-package, binary, workspace, target, CPU, chip, absolute ELF paths and check dependencies.
+package, binary, workspace, target, any declared CPU, chip, absolute ELF paths and check dependencies.
 `plfw info --firmware` opens the picker for this query without saving the choice.
 
 Platform descriptions appear in the platform overview and the firmware details. Firmware lists,
@@ -137,7 +137,7 @@ Both format versions include these fields.
 | Field | Meaning |
 | --- | --- |
 | `saved_selection` | Saved `firmware` and optional `profile`; omitted if no state exists |
-| `platforms` | Map of referenced platforms with optional `description`, declared `target`, `cpu` and `chip`, and `registered_firmwares` counted across the registry |
+| `platforms` | Map of referenced platforms with optional `description`, declared `target` and `chip`, and `registered_firmwares` counted across the registry. Format-specific `cpu` rules are below. |
 | `firmwares` | Map of firmwares, limited to the requested firmware when using `--firmware` |
 | `firmwares[ID].description`, `.platform`, `.package`, `.bin` | Optional description, registry values and the resolved binary name |
 | `firmwares[ID].workspace`, `.working_dir` | Discovered Cargo workspace and actual invocation directory |
@@ -156,7 +156,8 @@ including empty strings, are retained.
 | --- | --- |
 | `format_version` | Integer `2` |
 | `project_root` | Absolute path to the directory containing `polyfw.toml` |
-| `firmwares[ID].target`, `.cpu`, `.chip` | Values declared by the firmware's platform in `polyfw.toml` |
+| `firmwares[ID].target`, `.chip` | Values declared by the firmware's platform in `polyfw.toml` |
+| `platforms[ID].cpu`, `firmwares[ID].cpu` | Declared CPU, omitted when the platform has no `cpu` setting |
 | `firmwares[ID].manifest_path` | Absolute path to the firmware package's `Cargo.toml` |
 | `firmwares[ID].artifacts` | Map from profile name to `{path, exists}` |
 | `firmwares[ID].local_dependencies` | Detail entries with `package`, absolute `manifest_path` and boolean `target_clippy` |
@@ -170,10 +171,14 @@ in host checks. `target_clippy` identifies those included in target-side Clippy 
 | Field | Meaning |
 | --- | --- |
 | `repository_root` | Absolute path to the directory containing `polyfw.toml` |
+| `platforms[ID].cpu` | Declared CPU string |
 | `firmwares[ID].target` | Resolved artifact target name |
 | `firmwares[ID].check_platform` | Legacy consistency-check policy, always `false` in 0.3.0 |
 | `firmwares[ID].artifacts` | Ordered `{profile, path, exists}` entries for dev, release and any different saved profile |
 | `firmwares[ID].local_dependencies` | Detail entries with `package`, `manifest_path` and `target` |
+
+Format 1 requires a CPU declaration for every platform in the report. Use format 2 for reports
+that include platforms with no CPU declaration.
 
 Dependency manifest paths are project-relative, including `../` for external packages, or absolute
 when they cannot share a filesystem prefix. A dependency's `target` is `embedded` if it participates

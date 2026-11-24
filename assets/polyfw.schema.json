@@ -162,8 +162,11 @@
           "type": "string"
         },
         "cpu": {
-          "description": "Declared target CPU. Cargo's native rustflags precedence determines its final use.",
-          "type": "string"
+          "description": "Optional target CPU appended to the target-specific environment rustflags.\nCargo applies its native flag precedence. Omit to use Cargo's flags as supplied.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "description": {
           "description": "Optional human-readable label for platform information, independent of firmware descriptions.",
@@ -195,7 +198,6 @@
       "additionalProperties": false,
       "required": [
         "target",
-        "cpu",
         "chip"
       ]
     },

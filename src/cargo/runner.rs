@@ -99,6 +99,9 @@ fn is_regular_windows_name(name: &str) -> bool {
 
 pub(crate) fn target_cargo(context: &CargoContext, platform: &Platform) -> Command {
     let mut command = cargo_command(context);
+    let Some(cpu) = &platform.cpu else {
+        return command;
+    };
     let key = target_rustflags_key(&context.target);
     let mut flags = match command.get_envs().find(|(name, _)| *name == key.as_str()) {
         Some((_, value)) => value.unwrap_or_default().to_os_string(),
@@ -107,7 +110,7 @@ pub(crate) fn target_cargo(context: &CargoContext, platform: &Platform) -> Comma
     if !flags.is_empty() {
         flags.push(" ");
     }
-    flags.push(format!("-Ctarget-cpu={}", platform.cpu));
+    flags.push(format!("-Ctarget-cpu={cpu}"));
     command.env(key, flags);
     command
 }
@@ -256,7 +259,7 @@ mod tests {
             platform: Platform {
                 working_dir: Some("platform/test".into()),
                 target: "thumbv7em-none-eabihf".into(),
-                cpu: "cortex-m4".into(),
+                cpu: Some("cortex-m4".into()),
                 chip: "test-chip".into(),
                 ..Platform::default()
             },
@@ -387,7 +390,7 @@ mod tests {
         let platform = Platform {
             working_dir: Some("platform/test".into()),
             target: target.clone(),
-            cpu: "generic".into(),
+            cpu: Some("generic".into()),
             chip: "test-chip".into(),
             ..Platform::default()
         };

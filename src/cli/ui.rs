@@ -143,7 +143,7 @@ impl Ui {
                     name.clone(),
                     platform.registered_firmwares.to_string(),
                     platform.target.clone(),
-                    platform.cpu.clone(),
+                    platform.cpu.as_deref().unwrap_or_default().to_owned(),
                     platform.chip.clone(),
                     platform.description.clone().unwrap_or_default(),
                 ]
@@ -240,7 +240,11 @@ impl Ui {
                     .unwrap_or_else(|| "not reported by Cargo".into()),
             ),
             ("target", platform.target.clone()),
-            ("cpu", platform.cpu.clone()),
+        ]);
+        if let Some(cpu) = &platform.cpu {
+            fields.push(("cpu", cpu.clone()));
+        }
+        fields.extend([
             ("chip", platform.chip.clone()),
             ("package", firmware.package.clone()),
             ("bin", firmware.bin.clone()),

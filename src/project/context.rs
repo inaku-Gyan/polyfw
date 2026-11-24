@@ -689,7 +689,7 @@ mod tests {
         let platform = Platform {
             working_dir: Some("platform/dm-mc02".into()),
             target: "thumbv7em-none-eabihf".into(),
-            cpu: "cortex-m7".into(),
+            cpu: Some("cortex-m7".into()),
             chip: "STM32H723VGTx".into(),
             ..Platform::default()
         };
@@ -738,7 +738,7 @@ mod tests {
                     Platform {
                         working_dir: Some("platform/test".into()),
                         target: "thumbv7em-none-eabihf".into(),
-                        cpu: "cortex-m7".into(),
+                        cpu: Some("cortex-m7".into()),
                         chip: "test-chip".into(),
                         ..Platform::default()
                     },

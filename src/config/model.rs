@@ -100,8 +100,9 @@ pub(crate) struct Platform {
     pub(crate) description: Option<String>,
     /// Explicit Cargo compilation target, including host-tuple or a custom JSON target.
     pub(crate) target: String,
-    /// Declared target CPU. Cargo's native rustflags precedence determines its final use.
-    pub(crate) cpu: String,
+    /// Optional target CPU appended to the target-specific environment rustflags.
+    /// Cargo applies its native flag precedence. Omit to use Cargo's flags as supplied.
+    pub(crate) cpu: Option<String>,
     /// probe-rs chip name for hardware commands and editor sessions, for example `STM32H723VGTx`.
     pub(crate) chip: String,
     /// Default Cargo working directory. Firmware may override it. Defaults to `"."` beside

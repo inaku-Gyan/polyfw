@@ -14,9 +14,10 @@ enabled = true
 description = "An optional human-readable description about this platform"
 # Cargo commands run here; defaults to "." relative to this file.
 working-dir = "."
-# TODO: set the compilation target and CPU.
+# TODO: set the compilation target.
 target = "YOUR_TARGET"
-cpu = "YOUR_CPU"
+# Optional CPU appended to the target-specific rustflags.
+# cpu = "YOUR_CPU"
 # Optional intermediate and final-output directory overrides:
 # build-dir = "target/build/your-platform"
 # target-dir = "target/firmware/your-firmware"

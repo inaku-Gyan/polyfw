@@ -109,7 +109,7 @@ The resolved target also determines the ELF directory used by `info`, flashing a
 
 Set `cpu` to append `-Ctarget-cpu=…` to the inherited `CARGO_TARGET_<TARGET>_RUSTFLAGS` for
 target-side compilation. Cargo combines the target's file flags with that environment value,
-then adds matching `target.'cfg(...)'.rustflags`.
+then adds matching `target.'cfg(...)'.rustflags`. Omit `cpu` to leave Cargo's flags as supplied.
 rustc uses the target's default CPU when the selected flags leave it unspecified.
 
 Cargo uses the first applicable source of extra compiler flags in this order.
@@ -121,7 +121,7 @@ Cargo uses the first applicable source of extra compiler flags in this order.
 4. `build.rustflags`, including `CARGO_BUILD_RUSTFLAGS`.
 
 For example, `RUSTFLAGS=-Dwarnings` supplies the extra compiler flags even when the platform
-declares a CPU. The injected target-specific flags take precedence over `build.rustflags`.
+declares a CPU. When `cpu` is set, the target-specific flags take precedence over `build.rustflags`.
 Keep required linker flags with the target flags and the runtime and memory layout in the
 consuming Cargo project. [Cargo compiler flags](https://doc.rust-lang.org/cargo/reference/config.html#buildrustflags)
 
@@ -228,7 +228,7 @@ At least one platform and one firmware are required.
 | `min-polyfw-version` | Yes | Minimum CLI release expected to interpret and execute this configuration correctly |
 | `platforms.ID.description` | No | Label shown in platform information; independent of firmware descriptions |
 | `platforms.ID.target` | Yes | Explicit compilation target, `host-tuple` or custom JSON target argument |
-| `platforms.ID.cpu` | Yes | CPU appended to target-specific rustflags |
+| `platforms.ID.cpu` | No | Optional CPU appended to target-specific rustflags |
 | `platforms.ID.chip` | Yes | probe-rs chip name used by hardware commands and VS Code |
 | `firmwares.ID.description` | No | Label shown in firmware lists and the selector |
 | `firmwares.ID.platform` | Yes | ID of a platform in the same registry |
@@ -355,8 +355,9 @@ There is no automatic migration, bypass or inferred version for existing files. 
 `schema` and `probes` keep their [project-free behavior](usage.md#choose-a-project).
 
 When migrating from 0.2.0, remove `check-platform` from each platform and firmware that sets it.
-Set both version declarations to `"0.3.0"` and update the Schema directive to the matching
-release. See [firmware target configuration](#configure-the-firmware-target) for flag precedence.
+Keep `cpu` to supply a platform-specific flag, or omit it to use Cargo's settings. Set both version
+declarations to `"0.3.0"` and update the Schema directive to the matching release. See
+[firmware target configuration](#configure-the-firmware-target) for the flag precedence.
 
 For an existing file without declarations, review its fields and their meanings against the
 chosen release's guide, then add both declarations at the file's top level and align the editor

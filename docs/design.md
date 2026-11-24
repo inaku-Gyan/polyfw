@@ -14,8 +14,8 @@ observable command behavior.
 | probe-rs | Probe access, flashing, reset and RTT sessions |
 | VS Code extension | Debug sessions using polyfw's generated launch configuration |
 
-A Firmware is a selectable software entry bound to one Platform. A Platform declares a target,
-CPU and chip and may supply default working, intermediate and final-output directories.
+A Firmware is a selectable software entry bound to one Platform. A Platform declares a target
+and chip and may supply a CPU and default working, intermediate and final-output directories.
 Workspace means Cargo workspace. A Board is physical hardware.
 
 ## Rust library
@@ -103,7 +103,7 @@ when it addresses the same directory. MinGW can then link host build scripts and
 using object files in those directories. Paths that require extended syntax keep their original
 form. See [Windows path naming](https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file).
 
-Target-side commands pass the Platform target and use `target_cargo` to inject the CPU.
+Target-side commands pass the Platform target and use `target_cargo` for optional CPU injection.
 Cargo resolves [the effective flags](configuration.md#configure-the-firmware-target). Host lint and
 tests explicitly select `host-tuple` and inherit Cargo's host flags. Cargo resolves its host alias
 in the consuming toolchain. Custom target JSON filenames determine artifact target names.
@@ -122,7 +122,7 @@ Canonical manifests identify packages, keeping identical package names in differ
 
 Metadata caches retain execution contexts rather than only workspace roots. Ownership mappings
 come from metadata.workspace_root, never from the invocation directory. MCU scopes preserve
-compilation target, CPU and directory context. Host and formatting scopes
+compilation target, optional CPU and directory context. Host and formatting scopes
 deduplicate by their actual execution/directory context. Other-workspace dependencies use their
 own workspace root and native directories, even if another firmware registers that workspace.
 

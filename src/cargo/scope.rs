@@ -70,7 +70,7 @@ pub(crate) fn resolve(
     Ok(scopes)
 }
 
-type MetadataKey = (CargoContext, Option<(String, String)>);
+type MetadataKey = (CargoContext, Option<(String, Option<String>)>);
 
 struct Resolver {
     root: PathBuf,

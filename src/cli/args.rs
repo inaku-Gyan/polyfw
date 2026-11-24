@@ -336,7 +336,7 @@ pub(crate) enum Task {
     ///
     /// Build each firmware from its resolved working directory with --locked and the
     /// explicit Platform target. An explicit bin adds --bin. Cargo picks default targets
-    /// when bin is omitted. Output directories inherit from the Platform. The
+    /// when bin is omitted. Output directories inherit from the Platform. An optional
     /// Platform CPU follows Cargo's rustflags precedence.
     /// Inherit a saved profile for one firmware, or override it with a profile flag.
     /// --all-firmwares uses only the explicitly supplied profile.
@@ -446,8 +446,8 @@ pub(crate) enum Task {
     /// libraries and tests for the host. config.local-dependencies filters reachable
     /// path packages, including local test helpers. Other binaries in a package are
     /// included. Preserve each resolved working/output directory context. Host checks use
-    /// host-tuple and native Cargo flags. Target checks use the Platform target.
-    /// The Platform CPU follows Cargo's rustflags precedence.
+    /// host-tuple and native Cargo flags. Target checks use the Platform target. An
+    /// optional Platform CPU follows Cargo's rustflags precedence.
     #[command(
         verbatim_doc_comment,
         after_long_help = "Examples:

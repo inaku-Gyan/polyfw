@@ -36,7 +36,8 @@ struct Platform<'a> {
     description: Option<&'a str>,
     registered_firmwares: usize,
     target: &'a str,
-    cpu: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cpu: Option<&'a str>,
     chip: &'a str,
 }
 
@@ -86,7 +87,8 @@ struct FirmwareV2<'a> {
     fields: FirmwareFields<'a>,
     manifest_path: &'a Path,
     target: &'a str,
-    cpu: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cpu: Option<&'a str>,
     chip: &'a str,
     artifacts: BTreeMap<&'a str, ArtifactV2<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -120,8 +122,18 @@ struct DependencyV2<'a> {
     target_clippy: bool,
 }
 
-pub(crate) fn info_v1(report: &ProjectInfo) -> serde_json::Result<String> {
-    serde_json::to_string_pretty(&InfoV1 {
+pub(crate) fn info_v1(report: &ProjectInfo) -> crate::Result<String> {
+    if let Some((id, _)) = report
+        .platforms
+        .iter()
+        .find(|(_, platform)| platform.cpu.is_none())
+    {
+        return Err(format!(
+            "JSON format 1 requires a cpu declaration for platform {id}. Use --json=2."
+        )
+        .into());
+    }
+    Ok(serde_json::to_string_pretty(&InfoV1 {
         repository_root: &report.root,
         saved_selection: saved_selection(report),
         platforms: platforms(report),
@@ -161,7 +173,7 @@ pub(crate) fn info_v1(report: &ProjectInfo) -> serde_json::Result<String> {
                 )
             })
             .collect(),
-    })
+    })?)
 }
 
 pub(crate) fn info_v2(report: &ProjectInfo) -> serde_json::Result<String> {
@@ -181,7 +193,7 @@ pub(crate) fn info_v2(report: &ProjectInfo) -> serde_json::Result<String> {
                         fields: firmware.into(),
                         manifest_path: &firmware.manifest_path,
                         target: &platform.target,
-                        cpu: &platform.cpu,
+                        cpu: platform.cpu.as_deref(),
                         chip: &platform.chip,
                         artifacts: firmware
                             .artifacts
@@ -239,7 +251,7 @@ fn platforms(report: &ProjectInfo) -> BTreeMap<&str, Platform<'_>> {
                     description: platform.description.as_deref(),
                     registered_firmwares: platform.registered_firmwares,
                     target: &platform.target,
-                    cpu: &platform.cpu,
+                    cpu: platform.cpu.as_deref(),
                     chip: &platform.chip,
                 },
             )

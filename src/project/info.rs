@@ -24,7 +24,8 @@ pub struct PlatformInfo {
     pub description: Option<String>,
     pub registered_firmwares: usize,
     pub target: String,
-    pub cpu: String,
+    /// CPU declared in the project configuration. Cargo flags determine the effective CPU.
+    pub cpu: Option<String>,
     pub chip: String,
 }
 
