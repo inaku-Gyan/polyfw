@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0 (unreleased)
+## [0.3.0]
 
 ### Breaking changes
 
@@ -9,11 +9,13 @@
   before reinstalling the `polyfw` package. For an archive installation, remove the old executable
   from `PATH` when adding `plfw`. Check the installed version with `plfw --version`.
 - `info --json` uses format 2. It reports `project_root`, declared platform targets, absolute
-  manifest paths and artifacts keyed by profile. The 0.2.0 layout is retired. See the
-  [JSON migration](docs/usage.md#migrate-json-readers-from-020) to update scripts.
-- The 0.3.0 configuration contract removes `check-platform` and `cpu`. Configure `target-cpu`
-  and other compiler flags in Cargo. See the
-  [configuration migration](docs/configuration.md#configuration-compatibility).
+  manifest paths and artifacts keyed by profile. In scripts, use `plfw info --json=2` and update
+  readers of the 0.2.0 layout. See the [JSON migration](docs/usage.md#migrate-json-readers-from-020).
+- Projects using a 0.2.0 configuration must migrate it to use `plfw` 0.3.0. The new contract
+  removes `check-platform` and `cpu` and retires polyfw's pre-compilation target and CPU checks.
+  Cargo supplies all compiler flags. See the
+  [configuration migration](docs/configuration.md#configuration-compatibility) for setting
+  `target-cpu` in Cargo and updating the version declarations.
 
 ### Added
 
@@ -62,5 +64,6 @@
   Schema with `schema`.
 - Install from crates.io or use prebuilt Linux, macOS and Windows archives from GitHub Releases.
 
+[0.3.0]: https://github.com/inaku-Gyan/polyfw/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/inaku-Gyan/polyfw/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/inaku-Gyan/polyfw/releases/tag/v0.1.0
