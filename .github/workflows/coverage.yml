@@ -1,0 +1,75 @@
+name: Coverage
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review, converted_to_draft]
+    paths-ignore:
+      - '**.md'
+
+concurrency:
+  group: coverage-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  coverage:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          # Codecov associates PR reports with the head commit.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          cache: false
+          components: llvm-tools
+          target: thumbv7em-none-eabihf
+          build-warnings: warn
+
+      - uses: taiki-e/install-action@v2.90.6
+        with:
+          tool: just@1.58.0,cargo-llvm-cov@0.9.2
+
+      - name: Generate coverage reports
+        run: just coverage
+
+      - name: Upload HTML report
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-html
+          path: target/llvm-cov/html/
+          if-no-files-found: error
+
+      - name: Upload coverage to Codecov
+        id: codecov
+        uses: codecov/codecov-action@v7.1.1
+        continue-on-error: true
+        with:
+          use_oidc: true
+          files: target/llvm-cov/lcov.info
+          disable_search: true
+          fail_ci_if_error: true
+
+      - name: Summarize coverage
+        shell: bash
+        env:
+          CODECOV_OUTCOME: ${{ steps.codecov.outcome }}
+        run: |
+          cargo llvm-cov report --remap-path-prefix --json --summary-only \
+            | jq -er '.data[0].totals.lines | "**Line coverage** \(.covered)/\(.count) lines (\(.percent * 100 | round / 100)%)"' \
+            >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$CODECOV_OUTCOME" == failure ]]; then
+            printf '\nCodecov upload failed. See the upload step for details.\n' >> "$GITHUB_STEP_SUMMARY"
+          fi

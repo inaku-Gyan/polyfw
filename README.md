@@ -3,6 +3,7 @@
 <p align="center">
   <a href="https://crates.io/crates/polyfw"><img alt="crates.io version" src="https://img.shields.io/crates/v/polyfw"></a>
   <a href="https://github.com/inaku-Gyan/polyfw/actions/workflows/ci.yml"><img alt="CI status" src="https://github.com/inaku-Gyan/polyfw/actions/workflows/ci.yml/badge.svg?branch=main"></a>
+  <a href="https://app.codecov.io/gh/inaku-Gyan/polyfw"><img alt="Code coverage" src="https://codecov.io/gh/inaku-Gyan/polyfw/branch/main/graph/badge.svg"></a>
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-blue"></a>
 </p>
 

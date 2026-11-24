@@ -137,6 +137,21 @@ fixtures establish generated arguments/settings, not physical device behavior.
 | `just test-cli` | Binary unit tests and the `standalone`, `project_root` and `platforms` integration targets |
 | `just test-demos` | End-to-end tests against copies of the three demo projects |
 
+## Measure test coverage
+
+After setting up a checkout, install the pinned toolchain's LLVM tools and the coverage subcommand.
+
+```sh
+rustup component add llvm-tools
+cargo install cargo-llvm-cov --version 0.9.2 --locked
+just coverage
+```
+
+`just coverage` runs the default-feature unit and integration tests, including the demo builds,
+and measures line coverage in `src/` on the host. Open `target/llvm-cov/html/index.html` to inspect
+individual files. The same run writes `target/llvm-cov/lcov.info` for Codecov. `just check` also
+checks the Rustdoc example and verifies the library with default features disabled.
+
 ## Maintain the examples
 
 Each example directory is a self-contained consuming project. Copy the whole project directory
@@ -190,6 +205,14 @@ inherits the caller's network settings. With dependencies cached and the target 
 CI runs `just check` followed by `cargo build --locked --release` on pushes to `main` and non-draft
 pull requests, skipping Markdown-only changes. Tagged releases invoke the same workflow before
 building the native release binaries.
+
+Coverage runs on the same `main` pushes and non-draft pull requests. The run summary shows line
+coverage, and the `coverage-html` artifact contains the full HTML report. The workflow uploads LCOV
+to Codecov using GitHub OIDC, with tokenless uploads for fork pull requests. Codecov's project
+and patch statuses are informational. The run summary records Codecov upload failures.
+
+Enable the Codecov GitHub App for this repository to publish coverage. The README badge shows
+`main` coverage after the first successful upload from that branch. [Codecov setup](https://docs.codecov.com/docs/quick-start)
 
 For publishing credentials, stable/prerelease tags, binary targets and retry rules, follow
 [Releasing](releasing.md).

@@ -19,6 +19,11 @@ check:
     cargo test --locked
     cargo test --locked --no-default-features --test library
 
+# Measure coverage with the default-feature test suite and export HTML and LCOV.
+coverage:
+    cargo llvm-cov --locked --no-rustc-wrapper --remap-path-prefix --html --output-dir target/llvm-cov
+    cargo llvm-cov report --remap-path-prefix --lcov --output-path target/llvm-cov/lcov.info
+
 # Run library unit tests, API integration tests and doctests with default features disabled.
 test-lib:
     cargo test --locked --no-default-features --lib --test library
