@@ -345,9 +345,8 @@ fn directory_inheritance_and_native_defaults_use_cargos_actual_workspace_and_out
 }
 
 #[test]
-fn cargo_selects_the_native_flag_source_and_appends_the_declared_cpu_to_target_flags() {
+fn cargo_selects_the_native_flag_source_for_the_platform_target() {
     let fixture = Project::new("flag-precedence");
-    fixture.config("cpu = \"native\"", "", "");
     let version = succeed(
         support::workspace_cargo(&fixture.workspace)
             .arg("-vV")
@@ -388,7 +387,7 @@ fn cargo_selects_the_native_flag_source_and_appends_the_declared_cpu_to_target_f
             fixture
                 .command(&["build", "led-demo"])
                 .env("CARGO_BUILD_TARGET", "polyfw-env-target")
-                .env(&flag_key, "--cfg from_env -Ctarget-cpu=generic")
+                .env(&flag_key, "--cfg from_env")
                 .envs(environment.iter().copied())
                 .env("POLYFW_EXPECTED_RUSTFLAGS", expected.join("\x1f"))
                 .output()
@@ -402,8 +401,6 @@ fn cargo_selects_the_native_flag_source_and_appends_the_declared_cpu_to_target_f
             "from_file",
             "--cfg",
             "from_env",
-            "-Ctarget-cpu=generic",
-            "-Ctarget-cpu=native",
             "--cfg",
             "from_cfg",
         ],
@@ -424,7 +421,6 @@ fn cargo_selects_the_native_flag_source_and_appends_the_declared_cpu_to_target_f
 #[test]
 fn cargo_applies_includes_and_conditional_flags_to_builds_and_target_checks() {
     let fixture = Project::new("native-config");
-    fixture.config("cpu = \"native\"", "", "");
     fs::write(
         fixture.workspace.join(".cargo/config.toml"),
         "include = [\"flags.toml\"]\n",
@@ -442,7 +438,7 @@ fn cargo_applies_includes_and_conditional_flags_to_builds_and_target_checks() {
 }
 
 #[test]
-fn an_omitted_cpu_preserves_cargo_build_flags_and_is_absent_from_info() {
+fn cargo_uses_build_flags_when_target_flags_are_absent() {
     let fixture = Project::new("build-flags");
     fs::write(
         fixture.workspace.join(".cargo/config.toml"),
@@ -451,36 +447,28 @@ fn an_omitted_cpu_preserves_cargo_build_flags_and_is_absent_from_info() {
     .unwrap();
     fs::write(fixture.workspace.join("led-demo/src/lib.rs"), "#![allow(unexpected_cfgs)]\n#[cfg(not(build_flags))]\ncompile_error!(\"native build flags were lost\");\npub fn value() -> bool { true }\n").unwrap();
     succeed(fixture.command(&["build", "led-demo"]).output().unwrap());
-    let report = fixture.info();
-    assert!(report["platforms"]["demo-board"].get("cpu").is_none());
-    let firmware = &report["firmwares"]["led-demo"];
-    assert!(firmware.get("cpu").is_none());
-    assert!(firmware.get("check_platform").is_none());
-    assert_eq!(firmware["artifacts"]["dev"]["exists"], true);
-
-    let output = fixture.command(&["info", "--json=1"]).output().unwrap();
-    assert!(!output.status.success());
-    assert!(output.stdout.is_empty());
-    let error = String::from_utf8(output.stderr).unwrap();
-    assert!(
-        error.contains("requires a cpu declaration for platform demo-board"),
-        "{error}"
+    assert_eq!(
+        fixture.info()["firmwares"]["led-demo"]["artifacts"]["dev"]["exists"],
+        true
     );
-    assert!(error.contains("--json=2"), "{error}");
 }
 
 #[test]
-fn check_platform_is_rejected_in_platform_and_firmware_configuration() {
+fn removed_compiler_fields_are_rejected_in_configuration() {
     let fixture = Project::new("removed-field");
-    for (platform, led) in [
-        ("check-platform = true", ""),
-        ("", "check-platform = false"),
+    for (platform, led, field) in [
+        ("cpu = \"native\"", "", "cpu"),
+        ("check-platform = true", "", "check-platform"),
+        ("", "check-platform = false", "check-platform"),
     ] {
         fixture.config(platform, led, "");
         let output = fixture.command(&["info"]).output().unwrap();
         assert!(!output.status.success());
         let error = String::from_utf8(output.stderr).unwrap();
-        assert!(error.contains("unknown field `check-platform`"), "{error}");
+        assert!(
+            error.contains(&format!("unknown field `{field}`")),
+            "{error}"
+        );
     }
 }
 
@@ -531,7 +519,7 @@ fn external_members_can_supply_the_working_directory_without_changing_workspace_
             .unwrap(),
     );
     fixture.config(
-        "cpu = \"native\"",
+        "",
         &format!(
             "working-dir = {}",
             toml::Value::String(member.display().to_string())
@@ -541,7 +529,6 @@ fn external_members_can_supply_the_working_directory_without_changing_workspace_
     let info = fixture.info();
     let firmware = &info["firmwares"]["led-demo"];
     assert_eq!(firmware["target"], "host-tuple");
-    assert_eq!(firmware["cpu"], "native");
     assert_eq!(firmware["chip"], "test-chip");
     assert_eq!(
         Path::new(firmware["manifest_path"].as_str().unwrap())

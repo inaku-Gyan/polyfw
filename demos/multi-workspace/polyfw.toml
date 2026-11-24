@@ -12,7 +12,6 @@ enabled = false
 [platforms.board-a]
 description = "board-A"
 target = "thumbv7em-none-eabihf"
-cpu = "cortex-m7"
 chip = "STM32H723VGTx"
 working-dir = "bsp/board-a"
 target-dir = "target/firmware/board-a"
@@ -20,7 +19,6 @@ target-dir = "target/firmware/board-a"
 [platforms.board-b]
 description = "board-B"
 target = "thumbv7em-none-eabihf"
-cpu = "cortex-m4"
 chip = "STM32F407IG"
 working-dir = "bsp/board-b"
 target-dir = "target/firmware/board-b"

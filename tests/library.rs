@@ -58,7 +58,6 @@ min-polyfw-version = "0.3.0"
 
 [platforms.host]
 target = "host-tuple"
-cpu = "native"
 chip = "fixture"
 target-dir = "built"
 

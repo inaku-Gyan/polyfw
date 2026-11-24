@@ -107,25 +107,36 @@ Declare one `target` per platform in `polyfw.toml`. polyfw passes it as `--targe
 target-side Clippy and package cleanup, overriding `CARGO_BUILD_TARGET` and Cargo's `build.target`.
 The resolved target also determines the ELF directory used by `info`, flashing and debugging.
 
-Set `cpu` to append `-Ctarget-cpu=…` to the inherited `CARGO_TARGET_<TARGET>_RUSTFLAGS` for
-target-side compilation. Cargo combines the target's file flags with that environment value,
-then adds matching `target.'cfg(...)'.rustflags`. Omit `cpu` to leave Cargo's flags as supplied.
-rustc uses the target's default CPU when the selected flags leave it unspecified.
+Keep the CPU, target features and shared linker arguments in the consuming project's Cargo
+configuration. For example, `firmware-demos` can put this in its `.cargo/config.toml`.
+
+```toml
+[target.thumbv7em-none-eabihf]
+rustflags = ["-Ctarget-cpu=cortex-m7", "-Clink-arg=-Tlink.x"]
+```
 
 Cargo uses the first applicable source of extra compiler flags in this order.
 
 1. `CARGO_ENCODED_RUSTFLAGS`, including an explicitly empty value.
 2. `RUSTFLAGS`, including an explicitly empty value.
-3. The combined flags for the target triple and matching `cfg(...)` entries. This includes
-   any CPU supplied by polyfw. A later `target-cpu` option can override an earlier one.
+3. The combined flags for the target triple and matching `cfg(...)` entries, including
+   `CARGO_TARGET_<TARGET>_RUSTFLAGS`.
 4. `build.rustflags`, including `CARGO_BUILD_RUSTFLAGS`.
 
-For example, `RUSTFLAGS=-Dwarnings` supplies the extra compiler flags even when the platform
-declares a CPU. When `cpu` is set, the target-specific flags take precedence over `build.rustflags`.
-Keep required linker flags with the target flags and the runtime and memory layout in the
-consuming Cargo project. [Cargo compiler flags](https://doc.rust-lang.org/cargo/reference/config.html#buildrustflags)
+For example, `RUSTFLAGS=-Dwarnings` supplies the entire set of extra flags in place of the CPU
+and linker flags in the configuration above.
+[Cargo compiler flags](https://doc.rust-lang.org/cargo/reference/config.html#buildrustflags)
+
+To give one binary an extra linker argument, emit `cargo::rustc-link-arg-bin=BIN=FLAG` from its
+package's `build.rs`. For example, `cargo::rustc-link-arg-bin=buzzer-demo=-Tlink-extra.x`
+supplies an extra linker script for `buzzer-demo`. Check Cargo's `TARGET` environment variable
+in the build script to scope an argument to a particular target. Both direct Cargo builds and
+`plfw build` use the package's build script.
+[Cargo build script instructions](https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-link-arg-bin)
 
 Cargo discovers configuration and rustup selects a toolchain from the effective `working-dir`.
+Platforms using the same Rust target can have separate working directories with different Cargo
+settings, including subdirectories of the same workspace.
 Discovering a different workspace root does not change this directory. Workspace membership still
 owns the lockfile and profiles. Packages outside their workspace directory are supported when
 Cargo declares them members; use Cargo's `package.workspace` setting when needed. A separate
@@ -157,7 +168,7 @@ ancestors, so it can create a separate configuration inside an existing project'
 Any existing `polyfw.toml` entry, including a directory or dangling symlink, is an error; move or
 remove it yourself before generating a replacement. There is no overwrite or merge mode.
 
-The template contains one platform and one firmware, TODO values for target, CPU, chip
+The template contains one platform and one firmware, TODO values for target, chip
 and firmware package, and the default checking/editor settings. The description examples may be
 edited or omitted, and the platform working directory defaults to `.` beside `polyfw.toml`.
 Edit the TODO values to match your project; set `bin` when the package has multiple binaries.
@@ -196,7 +207,6 @@ enabled = true
 [platforms.demo-board]
 description = "Shared demo board"
 target = "thumbv7em-none-eabihf"
-cpu = "cortex-m7"
 chip = "STM32H723VGTx"
 working-dir = "."
 build-dir = "target/build/demo-board"
@@ -228,7 +238,6 @@ At least one platform and one firmware are required.
 | `min-polyfw-version` | Yes | Minimum CLI release expected to interpret and execute this configuration correctly |
 | `platforms.ID.description` | No | Label shown in platform information; independent of firmware descriptions |
 | `platforms.ID.target` | Yes | Explicit compilation target, `host-tuple` or custom JSON target argument |
-| `platforms.ID.cpu` | No | Optional CPU appended to target-specific rustflags |
 | `platforms.ID.chip` | Yes | probe-rs chip name used by hardware commands and VS Code |
 | `firmwares.ID.description` | No | Label shown in firmware lists and the selector |
 | `firmwares.ID.platform` | Yes | ID of a platform in the same registry |
@@ -355,8 +364,10 @@ There is no automatic migration, bypass or inferred version for existing files. 
 `schema` and `probes` keep their [project-free behavior](usage.md#choose-a-project).
 
 When migrating from 0.2.0, remove `check-platform` from each platform and firmware that sets it.
-Keep `cpu` to supply a platform-specific flag, or omit it to use Cargo's settings. Set both version
-declarations to `"0.3.0"` and update the Schema directive to the matching release. See
+Move each platform's `cpu` to a `-Ctarget-cpu=…` argument in the corresponding Cargo target's
+rustflags, or reuse the existing argument when the project's Cargo configuration already declares
+it. Remove `cpu` from `polyfw.toml`, set both version declarations to `"0.3.0"` and update the
+Schema directive to the matching release. See
 [firmware target configuration](#configure-the-firmware-target) for the flag precedence.
 
 For an existing file without declarations, review its fields and their meanings against the
@@ -422,7 +433,7 @@ Run `plfw info`, `plfw verify --all-firmwares` and `plfw build --all-firmwares -
 after changing the registry. The polyfw project root need not be a Cargo workspace or Git repository.
 
 Migrating from 0.1 requires replacing `bsps`/`boards` with `platforms`/`firmwares`, moving workspace
-selection to `working-dir`, and declaring target/CPU. Review directory defaults and update both
+selection to `working-dir`, and declaring a target and chip. Review directory defaults and update both
 version declarations. Replace saved selection with `plfw select FIRMWARE` or clear it using
 `plfw select --clear`. Old configuration, CLI, JSON and saved-state aliases are not retained.
 

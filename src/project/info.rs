@@ -24,8 +24,6 @@ pub struct PlatformInfo {
     pub description: Option<String>,
     pub registered_firmwares: usize,
     pub target: String,
-    /// CPU declared in the project configuration. Cargo flags determine the effective CPU.
-    pub cpu: Option<String>,
     pub chip: String,
 }
 
@@ -40,7 +38,6 @@ impl PlatformInfo {
                 .filter(|firmware| firmware.platform == id)
                 .count(),
             target: platform.target.clone(),
-            cpu: platform.cpu.clone(),
             chip: platform.chip.clone(),
         }
     }
@@ -469,7 +466,7 @@ mod tests {
         .unwrap();
         fs::write(
             root.join("polyfw.toml"),
-            "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.test]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/test\"\nworking-dir = \"platform/test\"\n\
+            "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.test]\ntarget = \"thumbv7em-none-eabihf\"\ntarget-dir = \"target/firmware/test\"\nworking-dir = \"platform/test\"\n\
              chip = \"test-chip\"\n\
              [firmwares.one]\ndescription = \"first firmware\"\nplatform = \"test\"\n\
              package = \"firmware-fw\"\n\

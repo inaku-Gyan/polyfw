@@ -76,17 +76,6 @@ impl Registry {
                     return Err(format!("platform {id} has empty {field}").into());
                 }
             }
-            if let Some(cpu) = &platform.cpu {
-                if cpu.trim().is_empty() {
-                    return Err(format!("platform {id} has empty cpu").into());
-                }
-                if !cpu
-                    .bytes()
-                    .all(|byte| byte.is_ascii_alphanumeric() || b"-_.+".contains(&byte))
-                {
-                    return Err(format!("platform {id} has invalid CPU name: {cpu}").into());
-                }
-            }
             validate_directories(
                 id,
                 [

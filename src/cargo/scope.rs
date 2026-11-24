@@ -7,10 +7,9 @@ use super::model::{CargoContext, DependencyKind, Metadata, MetadataPackage, Sele
 use super::runner;
 use crate::InternalResult as Result;
 use crate::config::local_dependencies::LocalDependencies;
-use crate::config::model::Platform;
 
 pub(crate) struct WorkspaceScope {
-    pub(crate) platform: Platform,
+    pub(crate) target: String,
     pub(crate) cargo: CargoContext,
     pub(crate) firmware: BTreeSet<PathBuf>,
     pub(crate) packages: Vec<PackageScope>,
@@ -70,7 +69,7 @@ pub(crate) fn resolve(
     Ok(scopes)
 }
 
-type MetadataKey = (CargoContext, Option<(String, Option<String>)>);
+type MetadataKey = (CargoContext, Option<String>);
 
 struct Resolver {
     root: PathBuf,
@@ -114,19 +113,12 @@ impl Resolver {
         self.metadata_for(&cargo, None)
     }
 
-    fn metadata_for(
-        &mut self,
-        cargo: &CargoContext,
-        platform: Option<&Platform>,
-    ) -> Result<Rc<Metadata>> {
-        let key = (
-            cargo.clone(),
-            platform.map(|platform| (platform.target.clone(), platform.cpu.clone())),
-        );
+    fn metadata_for(&mut self, cargo: &CargoContext, target: Option<&str>) -> Result<Rc<Metadata>> {
+        let key = (cargo.clone(), target.map(str::to_owned));
         if let Some(metadata) = self.metadata.get(&key) {
             return Ok(Rc::clone(metadata));
         }
-        let metadata = Rc::new(cargo_metadata_for(cargo, platform, true)?);
+        let metadata = Rc::new(cargo_metadata_for(cargo, target, true)?);
         let owner = canonical(Path::new(&metadata.workspace_root))?;
         for package in &metadata.packages {
             if metadata.workspace_members.contains(&package.id)
@@ -184,14 +176,15 @@ impl Resolver {
         selections: &[Selection],
     ) -> Result<WorkspaceScope> {
         let cargo = &selection.cargo;
-        let metadata = self.metadata_for(cargo, Some(&selection.platform))?;
+        let target = &selection.platform.target;
+        let firmware_metadata = self.metadata_for(cargo, Some(target))?;
         let mut pending = Vec::new();
         let mut firmware = BTreeSet::new();
         for entry in selections
             .iter()
             .filter(|entry| same_context(entry, selection))
         {
-            let package = metadata
+            let package = firmware_metadata
                 .workspace_package(&entry.firmware.package)
                 .ok_or_else(|| {
                     format!(
@@ -202,12 +195,12 @@ impl Resolver {
             firmware.insert(canonical(&package.manifest_path)?);
             pending.extend([
                 (
-                    Rc::clone(&metadata),
+                    Rc::clone(&firmware_metadata),
                     package.id.clone(),
                     CompilationTarget::Embedded,
                 ),
                 (
-                    Rc::clone(&metadata),
+                    Rc::clone(&firmware_metadata),
                     package.id.clone(),
                     CompilationTarget::Host,
                 ),
@@ -247,10 +240,7 @@ impl Resolver {
                 } else {
                     let (owner, host_id) = self.owner(&manifest)?;
                     let (host_metadata, host_cargo) = if owner == cargo.workspace {
-                        (
-                            self.metadata_for(cargo, Some(&selection.platform))?,
-                            cargo.clone(),
-                        )
+                        (Rc::clone(&firmware_metadata), cargo.clone())
                     } else {
                         let data = self.metadata(&owner)?;
                         let host_cargo = CargoContext {
@@ -303,7 +293,7 @@ impl Resolver {
             (&left.name, &left.manifest_path).cmp(&(&right.name, &right.manifest_path))
         });
         Ok(WorkspaceScope {
-            platform: selection.platform.clone(),
+            target: target.clone(),
             cargo: cargo.clone(),
             firmware: firmware
                 .iter()
@@ -1064,7 +1054,7 @@ mod tests {
         .unwrap();
         fs::write(
             root.join("polyfw.toml"),
-            "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.firmware-family]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/firmware-family\"\nworking-dir = \"platform/test\"\n\
+            "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.firmware-family]\ntarget = \"thumbv7em-none-eabihf\"\ntarget-dir = \"target/firmware/firmware-family\"\nworking-dir = \"platform/test\"\n\
              chip = \"test\"\n\
              [firmwares.one]\ndescription = \"first firmware\"\n\
              platform = \"firmware-family\"\npackage = \"firmware-a\"\nbin = \"firmware-a\"\n\

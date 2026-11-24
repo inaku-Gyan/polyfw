@@ -124,13 +124,8 @@ pub(crate) fn clean_command(selection: &Selection, all_firmwares: bool) -> Comma
 }
 
 pub(crate) fn build_command(selection: &Selection) -> Command {
-    let mut command = runner::target_cargo(&selection.cargo, &selection.platform);
-    command
-        .arg("build")
-        .arg("--target")
-        .arg(&selection.platform.target)
-        .arg("-p")
-        .arg(&selection.firmware.package);
+    let mut command = runner::target_cargo(&selection.cargo, "build", &selection.platform.target);
+    command.arg("-p").arg(&selection.firmware.package);
     if let Some(bin) = &selection.firmware.bin {
         command.arg("--bin").arg(bin);
     }
@@ -164,11 +159,7 @@ pub(crate) fn lint_stages(scopes: &[WorkspaceScope]) -> Vec<Invocation> {
         if scope.packages.is_empty() {
             continue;
         }
-        let mut command = runner::target_cargo(&scope.cargo, &scope.platform);
-        command
-            .arg("clippy")
-            .arg("--target")
-            .arg(&scope.platform.target);
+        let mut command = runner::target_cargo(&scope.cargo, "clippy", &scope.target);
         let names = add_packages(
             &mut command,
             scope.packages.iter().filter(|package| package.embedded),

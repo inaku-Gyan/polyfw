@@ -7,7 +7,7 @@ use std::process::{Command, Output};
 mod support;
 
 #[test]
-fn firmware_paths_follow_explicit_platform_and_cpu_reporting_remains_declarative() {
+fn firmware_paths_follow_the_explicit_platform_target() {
     let root = std::env::temp_dir().join(format!("polyfw-config-{}", std::process::id()));
     fs::create_dir_all(root.join("src")).unwrap();
     fs::create_dir_all(root.join(".cargo")).unwrap();
@@ -31,7 +31,7 @@ fn firmware_paths_follow_explicit_platform_and_cpu_reporting_remains_declarative
     .unwrap();
     fs::write(
         root.join("polyfw.toml"),
-        "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.model]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/model\"\nworking-dir = \".\"\nchip = \"test-chip\"\n\
+        "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.model]\ntarget = \"thumbv7em-none-eabihf\"\ntarget-dir = \"target/firmware/model\"\nworking-dir = \".\"\nchip = \"test-chip\"\n\
          [firmwares.firmware]\ndescription = \"Fixture\"\nplatform = \"model\"\n\
          package = \"application\"\n",
     )
@@ -52,28 +52,18 @@ fn firmware_paths_follow_explicit_platform_and_cpu_reporting_remains_declarative
         configured["platforms"]["model"]["target"],
         "thumbv7em-none-eabihf"
     );
-    assert_eq!(configured["platforms"]["model"]["cpu"], "cortex-m7");
-    let overridden = info(&[
-        ("CARGO_BUILD_TARGET", "thumbv8m.main-none-eabihf"),
-        ("RUSTFLAGS", "--codegen=target-cpu=cortex-m33"),
-    ]);
+    let overridden = info(&[("CARGO_BUILD_TARGET", "thumbv8m.main-none-eabihf")]);
     assert_eq!(
         overridden["platforms"]["model"]["target"],
         "thumbv7em-none-eabihf"
     );
-    assert_eq!(overridden["platforms"]["model"]["cpu"], "cortex-m7");
     let firmware = &overridden["firmwares"]["firmware"];
     assert_eq!(firmware["target"], "thumbv7em-none-eabihf");
-    assert_eq!(firmware["cpu"], "cortex-m7");
     assert_eq!(firmware["chip"], "test-chip");
     let artifact = &firmware["artifacts"]["dev"]["path"];
     assert!(
         Path::new(artifact.as_str().unwrap())
             .ends_with("target/firmware/model/thumbv7em-none-eabihf/debug/application")
-    );
-    assert_eq!(
-        info(&[("RUSTFLAGS", "")])["firmwares"]["firmware"]["cpu"],
-        "cortex-m7"
     );
     fs::remove_dir_all(root).unwrap();
 }
@@ -139,7 +129,7 @@ fn cargo_commands_use_each_workspaces_pin_instead_of_the_tools_inherited_toolcha
     fs::write(
         firmware.join("polyfw.toml"),
         "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[config]\nlocal-dependencies = [\"../common\"]\n\
-             [platforms.model]\ntarget = \"host-tuple\"\ncpu = \"native\"\ntarget-dir = \"target/firmware/model\"\nworking-dir = \".\"\n\
+             [platforms.model]\ntarget = \"host-tuple\"\ntarget-dir = \"target/firmware/model\"\nworking-dir = \".\"\n\
              chip = \"test-chip\"\n\
              [firmwares.firmware]\ndescription = \"Fixture\"\nplatform = \"model\"\n\
              package = \"firmware\"\n",
@@ -232,7 +222,7 @@ fn one_tool_keeps_two_projects_selections_and_debug_files_independent() {
         fs::write(project.join("src/main.rs"), "fn main() {}\n").unwrap();
         fs::write(
             project.join("polyfw.toml"),
-            "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.model]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/model\"\nworking-dir = \".\"\n\
+            "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.model]\ntarget = \"thumbv7em-none-eabihf\"\ntarget-dir = \"target/firmware/model\"\nworking-dir = \".\"\n\
              chip = \"STM32H723VGTx\"\n\
              [firmwares.firmware]\ndescription = \"Fixture\"\nplatform = \"model\"\n\
              package = \"application\"\n",

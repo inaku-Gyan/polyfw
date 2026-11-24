@@ -159,7 +159,7 @@ The recipe forwards test-name filters and harness options after Cargo's `--` sep
 `tests/demos.rs` copies the checked-in projects into temporary directories and invokes the
 built `plfw` executable. It exercises real MCU builds, host library tests, selection, external
 workspace members and dependency scopes. The tests check reported artifact paths, platform
-CPU/chip values and linked 32-bit ARM ELF executables with Thumb entry points in flash, including
+targets and chips, and linked 32-bit ARM ELF executables with Thumb entry points in flash, including
 independent builds of a package's two binaries. Failing host tests introduced in the copies check
 that polyfw includes reachable shared dependencies and excludes unrelated packages, with separate
 cases for each shared library. The multi-workspace example also contains passing host tests for

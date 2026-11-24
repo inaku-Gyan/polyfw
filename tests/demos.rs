@@ -195,26 +195,25 @@ fn minimal_example_discovers_selects_and_builds_the_reported_artifact() {
     let example = Example::new("minimal");
     let output = succeeded(
         example
-            .command(&["info", "--json=1"])
+            .command(&["info", "--json=2"])
             .current_dir(example.root.join("src"))
             .output()
             .unwrap(),
     );
     let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(
-        Path::new(report["repository_root"].as_str().unwrap()),
+        Path::new(report["project_root"].as_str().unwrap()),
         example.root
     );
-    assert!(report.get("format_version").is_none());
-    assert!(report.get("project_root").is_none());
-    assert!(report["saved_selection"].is_null());
-    assert_eq!(report["firmwares"]["hello"]["package"], "hello");
-    assert_eq!(report["firmwares"]["hello"]["check_platform"], false);
-    assert_eq!(report["platforms"]["dm-mc02"]["cpu"], "cortex-m7");
-    for artifact in report["firmwares"]["hello"]["artifacts"]
-        .as_array()
-        .unwrap()
-    {
+    assert_eq!(report["format_version"], 2);
+    assert!(report.get("repository_root").is_none());
+    assert!(report.get("saved_selection").is_none());
+    let firmware = &report["firmwares"]["hello"];
+    assert_eq!(firmware["package"], "hello");
+    assert!(firmware.get("check_platform").is_none());
+    assert!(firmware.get("cpu").is_none());
+    assert!(report["platforms"]["dm-mc02"].get("cpu").is_none());
+    for artifact in firmware["artifacts"].as_object().unwrap().values() {
         assert_eq!(artifact["exists"], false);
     }
 
@@ -224,7 +223,6 @@ fn minimal_example_discovers_selects_and_builds_the_reported_artifact() {
     assert_eq!(report["saved_selection"]["firmware"], "hello");
     assert_eq!(report["saved_selection"]["profile"], "release");
     assert_arm_artifact(&report, "hello", "release");
-    assert_eq!(report["platforms"]["dm-mc02"]["cpu"], "cortex-m7");
     assert_eq!(report["platforms"]["dm-mc02"]["chip"], "STM32H723VGTx");
     assert!(!example.root.join(".vscode/launch.json").exists());
     example.run(&["verify", "--all-firmwares"]);
@@ -301,15 +299,11 @@ fn multi_firmware_example_switches_and_checks_only_the_selected_scope() {
     assert!(report.get("repository_root").is_none());
     assert_eq!(report, example.json(&["info", "--json"]));
     assert_eq!(report["firmwares"].as_object().unwrap().len(), 2);
-    let legacy = example.json(&["info", "--firmware", "led-demo", "--json", "1"]);
-    assert_eq!(
-        legacy["firmwares"]["led-demo"]["local_dependencies"],
-        serde_json::json!([{
-            "package": "common",
-            "manifest_path": Path::new("common").join("Cargo.toml"),
-            "target": "embedded",
-        }])
-    );
+    let common_manifest = example
+        .root
+        .join("common/Cargo.toml")
+        .canonicalize()
+        .unwrap();
     for id in ["led-demo", "buzzer-demo"] {
         assert!(report["firmwares"][id].get("local_dependencies").is_none());
         let details = example.json(&["info", "--firmware", id, "--json", "2"]);
@@ -317,11 +311,14 @@ fn multi_firmware_example_switches_and_checks_only_the_selected_scope() {
             details,
             example.json(&["info", "--json=latest", "--firmware", id])
         );
-        let dependencies = details["firmwares"][id]["local_dependencies"]
-            .as_array()
-            .unwrap();
-        assert_eq!(dependencies.len(), 1);
-        assert_eq!(dependencies[0]["package"], "common");
+        assert_eq!(
+            details["firmwares"][id]["local_dependencies"],
+            serde_json::json!([{
+                "package": "common",
+                "manifest_path": common_manifest,
+                "target_clippy": true,
+            }])
+        );
     }
 
     example.run(&["select", "led-demo", "--release"]);
@@ -440,15 +437,14 @@ fn multi_workspace_example_reports_external_members_and_shared_scopes() {
     assert_eq!(report["firmwares"].as_object().unwrap().len(), 4);
     assert_eq!(report["platforms"]["board-a"]["registered_firmwares"], 3);
     assert_eq!(report["platforms"]["board-b"]["registered_firmwares"], 1);
-    for (platform, description, cpu, chip) in [
-        ("board-a", "board-A", "cortex-m7", "STM32H723VGTx"),
-        ("board-b", "board-B", "cortex-m4", "STM32F407IG"),
+    for (platform, description, chip) in [
+        ("board-a", "board-A", "STM32H723VGTx"),
+        ("board-b", "board-B", "STM32F407IG"),
     ] {
         assert_eq!(
             report["platforms"][platform]["target"],
             "thumbv7em-none-eabihf"
         );
-        assert_eq!(report["platforms"][platform]["cpu"], cpu);
         assert_eq!(report["platforms"][platform]["chip"], chip);
         assert_eq!(report["platforms"][platform]["description"], description);
     }
@@ -463,7 +459,7 @@ fn multi_workspace_example_reports_external_members_and_shared_scopes() {
         assert_eq!(firmware["platform"], platform);
         assert_eq!(firmware["package"], package);
         assert_eq!(firmware["bin"], id);
-        for field in ["target", "cpu", "chip"] {
+        for field in ["target", "chip"] {
             assert_eq!(firmware[field], details["platforms"][platform][field]);
         }
         assert_eq!(

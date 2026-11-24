@@ -1,8 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::config::model::Platform;
-
 use super::model::{CargoContext, Selection};
 use crate::profile::Profile;
 
@@ -97,29 +95,10 @@ fn is_regular_windows_name(name: &str) -> bool {
         })
 }
 
-pub(crate) fn target_cargo(context: &CargoContext, platform: &Platform) -> Command {
+pub(crate) fn target_cargo(context: &CargoContext, subcommand: &str, target: &str) -> Command {
     let mut command = cargo_command(context);
-    let Some(cpu) = &platform.cpu else {
-        return command;
-    };
-    let key = target_rustflags_key(&context.target);
-    let mut flags = match command.get_envs().find(|(name, _)| *name == key.as_str()) {
-        Some((_, value)) => value.unwrap_or_default().to_os_string(),
-        None => std::env::var_os(&key).unwrap_or_default(),
-    };
-    if !flags.is_empty() {
-        flags.push(" ");
-    }
-    flags.push(format!("-Ctarget-cpu={cpu}"));
-    command.env(key, flags);
+    command.args([subcommand, "--target", target]);
     command
-}
-
-pub(crate) fn target_rustflags_key(target: &str) -> String {
-    format!(
-        "CARGO_TARGET_{}_RUSTFLAGS",
-        target.replace(['-', '.'], "_").to_uppercase()
-    )
 }
 
 pub(crate) fn resolve_target(
@@ -202,7 +181,7 @@ mod tests {
     use std::fs;
 
     use super::*;
-    use crate::config::model::Firmware;
+    use crate::config::model::{Firmware, Platform};
 
     #[test]
     fn temporary_projects_use_the_project_toolchain_with_an_unusable_ancestor() {
@@ -259,7 +238,6 @@ mod tests {
             platform: Platform {
                 working_dir: Some("platform/test".into()),
                 target: "thumbv7em-none-eabihf".into(),
-                cpu: Some("cortex-m4".into()),
                 chip: "test-chip".into(),
                 ..Platform::default()
             },
@@ -382,21 +360,14 @@ mod tests {
         fs::write(
             workspace.join(".cargo/config.toml"),
             format!(
-                "[build]\ntarget = {target:?}\n[target.{target}]\n\
+                "[build]\ntarget = \"ignored-default-target\"\n[target.{target}]\n\
                  rustflags = [\"--cfg\", \"platform_configuration\"]\n"
             ),
         )
         .unwrap();
-        let platform = Platform {
-            working_dir: Some("platform/test".into()),
-            target: target.clone(),
-            cpu: Some("generic".into()),
-            chip: "test-chip".into(),
-            ..Platform::default()
-        };
         let mut cargo = CargoContext::fixture(&root, "firmware-family");
         cargo.target = target.clone();
-        let mut command = target_cargo(&cargo, &platform);
+        let mut command = target_cargo(&cargo, "rustc", &target);
         let target_dir = root.join("target/firmware/firmware-family");
         assert_eq!(command.get_current_dir(), Some(workspace.as_path()));
         assert_eq!(
@@ -409,7 +380,7 @@ mod tests {
         );
 
         let output = command
-            .args(["rustc", "--quiet", "--lib", "--", "--print", "cfg"])
+            .args(["--quiet", "--lib", "--", "--print", "cfg"])
             .output()
             .unwrap();
         assert!(

@@ -8,12 +8,11 @@
   and CI to invoke `plfw`. For a Cargo or Binstall installation, run `cargo uninstall polyfw`
   before reinstalling the `polyfw` package. For an archive installation, remove the old executable
   from `PATH` when adding `plfw`. Check the installed version with `plfw --version`.
-- `info --json` defaults to format 2. It reports `project_root`, declared platform targets,
-  absolute manifest paths and artifacts keyed by profile. It omits `cpu` when the platform
-  leaves it to Cargo. Use `info --json=1` for the previous layout with declared CPUs.
-  Its legacy `check_platform` field reports `false`.
-- The 0.3.0 configuration contract removes `check-platform` and lets platforms omit `cpu`.
-  Cargo applies its native flag precedence for builds and target-side Clippy. See the
+- `info --json` uses format 2. It reports `project_root`, declared platform targets, absolute
+  manifest paths and artifacts keyed by profile. The 0.2.0 layout is retired. See the
+  [JSON migration](docs/usage.md#migrate-json-readers-from-020) to update scripts.
+- The 0.3.0 configuration contract removes `check-platform` and `cpu`. Configure `target-cpu`
+  and other compiler flags in Cargo. See the
   [configuration migration](docs/configuration.md#configuration-compatibility).
 
 ### Added

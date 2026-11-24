@@ -14,16 +14,15 @@
 
 ## Features
 
-- **Firmware registry:** map selectable firmwares to platforms declaring the target, CPU and
+- **Firmware registry:** map selectable firmwares to platforms declaring the target and
   probe chip, with configurable Cargo working and output directories.
 - **Checks across workspaces:** run formatting checks, MCU and host Clippy, and host tests for
   firmware and reachable local dependencies.
-- **Saved selections:** choose a firmware and profile, check target/CPU consistency, and inspect
-  resolved ELF paths.
+- **Saved selections:** choose a firmware and profile and inspect resolved ELF paths.
 - **Flash and debug:** flash and monitor through probe-rs; generate optional VS Code debug configurations.
 
-Cargo owns workspace membership, configuration merging, dependencies and profiles; polyfw
-coordinates the firmware workflow.
+Cargo owns workspace membership, configuration merging, compiler flags, dependencies and profiles.
+polyfw coordinates the firmware workflow.
 
 ## Quick start
 

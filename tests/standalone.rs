@@ -53,13 +53,21 @@ fn help_version_and_schema_work_without_a_project_or_rust_tools() {
 fn info_rejects_unsupported_json_versions_before_opening_a_project() {
     let fixture = Fixture::new("info-json-version");
     fs::write(fixture.root.join("polyfw.toml"), "invalid TOML").unwrap();
-    for args in [vec!["--json=9999"], vec!["--json", "9999"]] {
+    for (args, version) in [
+        (vec!["--json=1"], "1"),
+        (vec!["--json", "1"], "1"),
+        (vec!["--json=9999"], "9999"),
+        (vec!["--json", "9999"], "9999"),
+    ] {
         let output = fixture.command().arg("info").args(args).output().unwrap();
         assert_eq!(output.status.code(), Some(2));
         assert!(output.stdout.is_empty());
         let stderr = String::from_utf8(output.stderr).unwrap();
-        assert!(stderr.contains("invalid value '9999'"), "{stderr}");
-        assert!(stderr.contains("possible values: 1, 2, latest"), "{stderr}");
+        assert!(
+            stderr.contains(&format!("invalid value '{version}'")),
+            "{stderr}"
+        );
+        assert!(stderr.contains("possible values: 2, latest"), "{stderr}");
     }
 }
 
@@ -566,7 +574,7 @@ impl Fixture {
             self.root.join("polyfw.toml"),
             format!(
                 "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[config.vscode]\nenabled = {vscode}\n\
-                 [platforms.model]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/model\"\nworking-dir = \"missing\"\nchip = \"test-chip\"\n\
+                 [platforms.model]\ntarget = \"thumbv7em-none-eabihf\"\ntarget-dir = \"target/firmware/model\"\nworking-dir = \"missing\"\nchip = \"test-chip\"\n\
                  [firmwares.firmware]\ndescription = \"Fixture\"\nplatform = \"model\"\n\
                  package = \"application\"\n"
             ),

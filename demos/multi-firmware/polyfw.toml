@@ -8,7 +8,6 @@ enabled = false
 
 [platforms.dm-mc02]
 target = "thumbv7em-none-eabihf"
-cpu = "cortex-m7"
 chip = "STM32H723VGTx"
 
 [firmwares.led-demo]

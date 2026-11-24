@@ -76,7 +76,6 @@ fn run_project(project: &Project, task: Task, ui: &Ui) -> Result<ExitCode> {
             };
             let report = project.info(query, options)?;
             match json {
-                Some(InfoJsonVersion::V1) => println!("{}", crate::json::info_v1(&report)?),
                 Some(InfoJsonVersion::V2 | InfoJsonVersion::Latest) => {
                     println!("{}", crate::json::info_v2(&report)?);
                 }

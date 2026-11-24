@@ -11,8 +11,8 @@ use polyfw::Profile;
 
 /// Build, check, flash and monitor embedded Rust firmware registered in polyfw.toml.
 ///
-/// A firmware ID selects a Cargo package/binary and one Platform. The Platform declares target,
-/// CPU and chip; directory settings inherit from Platform to Firmware. Cargo owns configuration
+/// A firmware ID selects a Cargo package/binary and one Platform. The Platform declares a target
+/// and chip. Directory settings inherit from Platform to Firmware. Cargo owns configuration
 /// merging, workspace membership, dependencies and profiles.
 #[derive(Debug, Parser)]
 #[command(
@@ -220,8 +220,6 @@ impl RttChannelMode {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 pub(crate) enum InfoJsonVersion {
-    #[value(name = "1")]
-    V1,
     #[value(name = "2")]
     V2,
     Latest,
@@ -336,8 +334,8 @@ pub(crate) enum Task {
     ///
     /// Build each firmware from its resolved working directory with --locked and the
     /// explicit Platform target. An explicit bin adds --bin. Cargo picks default targets
-    /// when bin is omitted. Output directories inherit from the Platform. An optional
-    /// Platform CPU follows Cargo's rustflags precedence.
+    /// when bin is omitted. Output directories inherit from the Platform. Cargo resolves
+    /// compiler flags from its configuration and environment.
     /// Inherit a saved profile for one firmware, or override it with a profile flag.
     /// --all-firmwares uses only the explicitly supplied profile.
     #[command(
@@ -446,8 +444,7 @@ pub(crate) enum Task {
     /// libraries and tests for the host. config.local-dependencies filters reachable
     /// path packages, including local test helpers. Other binaries in a package are
     /// included. Preserve each resolved working/output directory context. Host checks use
-    /// host-tuple and native Cargo flags. Target checks use the Platform target. An
-    /// optional Platform CPU follows Cargo's rustflags precedence.
+    /// host-tuple. Target checks use the Platform target. Cargo resolves compiler flags for both.
     #[command(
         verbatim_doc_comment,
         after_long_help = "Examples:
@@ -576,7 +573,7 @@ mod tests {
 
     #[test]
     fn info_distinguishes_an_overview_a_picker_and_a_named_firmware() {
-        use InfoJsonVersion::{Latest, V1, V2};
+        use InfoJsonVersion::{Latest, V2};
 
         for command in ["info", "i"] {
             for (flags, expected_firmware, expected_json) in [
@@ -585,8 +582,6 @@ mod tests {
                 (vec!["--firmware"], None, None),
                 (vec!["--firmware", "--json"], None, Some(Latest)),
                 (vec!["--json", "--firmware"], None, Some(Latest)),
-                (vec!["--firmware", "--json=1"], None, Some(V1)),
-                (vec!["--json", "1", "--firmware"], None, Some(V1)),
                 (vec!["--firmware", "--json=2"], None, Some(V2)),
                 (vec!["--json", "2", "--firmware"], None, Some(V2)),
                 (

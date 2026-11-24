@@ -547,12 +547,6 @@ mod tests {
         )
         .unwrap();
         fs::write(workspace.join("firmware/src/main.rs"), "fn main() {}\n").unwrap();
-        context
-            .registry
-            .platforms
-            .get_mut("test-platform")
-            .unwrap()
-            .cpu = Some("native".into());
         context.resolve_cargo().unwrap();
         let mut selection = context.selection("test-firmware").unwrap();
         selection.profile = Some("bench-debug".parse().unwrap());
@@ -574,12 +568,12 @@ mod tests {
     #[test]
     fn grouped_checks_preserve_distinct_execution_contexts_in_one_workspace() {
         let context = test_context(test_root("grouped-checks"));
-        let platform = context.registry.platforms["test-platform"].clone();
+        let target = &context.registry.platforms["test-platform"].target;
         let scopes = ["first", "second"].map(|id| {
             let mut cargo = CargoContext::fixture(&context.root, id);
             cargo.working_dir = context.root.join(id);
             WorkspaceScope {
-                platform: platform.clone(),
+                target: target.clone(),
                 cargo: cargo.clone(),
                 firmware: Default::default(),
                 packages: vec![PackageScope {
@@ -601,9 +595,6 @@ mod tests {
         );
         for Invocation { command, .. } in &host {
             assert!(command.get_args().any(|arg| arg == "host-tuple"));
-            assert!(!command.get_envs().any(|(key, value)| {
-                key == "CARGO_TARGET_THUMBV7EM_NONE_EABIHF_RUSTFLAGS" && value.is_some()
-            }));
         }
         assert_eq!(fmt_stages(&scopes, true).len(), 2);
         assert_eq!(lint_stages(&scopes).len(), 4);
@@ -789,7 +780,7 @@ mod tests {
             )
             .unwrap();
             let mut registry = String::from(
-                "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.test-platform]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/test-platform\"\nworking-dir = \"platform/test\"\n\
+                "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.test-platform]\ntarget = \"host-tuple\"\ntarget-dir = \"target/firmware/test-platform\"\nworking-dir = \"platform/test\"\n\
              chip = \"test-chip\"\n\
                  [firmwares.test-firmware]\ndescription = \"test firmware\"\nplatform = \"test-platform\"\n\
                  package = \"test-firmware\"\n",
@@ -806,16 +797,7 @@ mod tests {
                      platform = \"test-platform\"\npackage = \"test-firmware\"\nbin = \"unselected\"\n"
                 ));
             }
-            fs::write(
-                context.root.join("polyfw.toml"),
-                registry
-                    .replace(
-                        "target = \"thumbv7em-none-eabihf\"",
-                        "target = \"host-tuple\"",
-                    )
-                    .replace("cpu = \"cortex-m7\"", "cpu = \"native\""),
-            )
-            .unwrap();
+            fs::write(context.root.join("polyfw.toml"), registry).unwrap();
             let context = Context::load(context.root).unwrap();
 
             let selection = context.selection("test-firmware").unwrap();
@@ -981,7 +963,6 @@ mod tests {
                         working_dir: Some("platform/test".into()),
                         target_dir: Some("target/firmware/test-platform".into()),
                         target: "thumbv7em-none-eabihf".into(),
-                        cpu: Some("cortex-m7".into()),
                         chip: "test-chip".into(),
                         ..Platform::default()
                     },

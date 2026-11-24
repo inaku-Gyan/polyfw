@@ -2,10 +2,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use crate::InternalResult as Result;
-use crate::config::{
-    REGISTRY_FILE,
-    model::{Platform, Registry},
-};
+use crate::config::{REGISTRY_FILE, model::Registry};
 
 use super::model::{CargoContext, FirmwareCargo, Metadata, Selection};
 use super::runner;
@@ -52,11 +49,11 @@ pub(crate) fn resolve(root: &Path, registry: &Registry) -> Result<BTreeMap<Strin
             build_dir_override,
             ..CargoContext::default()
         };
-        let key = (cargo.clone(), platform.target.clone(), platform.cpu.clone());
+        let key = (cargo.clone(), platform.target.clone());
         if !metadata.contains_key(&key) {
             metadata.insert(
                 key.clone(),
-                cargo_metadata_for(&cargo, Some(platform), false)?,
+                cargo_metadata_for(&cargo, Some(&platform.target), false)?,
             );
         }
         let data = &metadata[&key];
@@ -118,17 +115,14 @@ fn absolute_directory(root: &Path, value: &str) -> PathBuf {
 
 pub(crate) fn cargo_metadata_for(
     context: &CargoContext,
-    platform: Option<&Platform>,
+    target: Option<&str>,
     dependencies: bool,
 ) -> Result<Metadata> {
-    let mut command = match platform {
-        Some(platform) => runner::target_cargo(context, platform),
-        None => runner::cargo_command(context),
-    };
+    let mut command = runner::cargo_command(context);
     command.args(["metadata", "--locked", "--format-version", "1"]);
-    if let Some(platform) = platform {
+    if let Some(target) = target {
         // metadata has no --target switch; align its native target default with builds.
-        command.env("CARGO_BUILD_TARGET", &platform.target);
+        command.env("CARGO_BUILD_TARGET", target);
     }
     if !dependencies {
         command.arg("--no-deps");
@@ -151,9 +145,7 @@ fn canonical(path: &Path) -> Result<PathBuf> {
 }
 
 pub(crate) fn same_context(left: &Selection, right: &Selection) -> bool {
-    left.cargo == right.cargo
-        && left.platform.target == right.platform.target
-        && left.platform.cpu == right.platform.cpu
+    left.cargo == right.cargo && left.platform.target == right.platform.target
 }
 
 pub(crate) fn unique_contexts(selections: &[Selection]) -> Vec<&Selection> {

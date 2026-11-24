@@ -143,7 +143,6 @@ impl Ui {
                     name.clone(),
                     platform.registered_firmwares.to_string(),
                     platform.target.clone(),
-                    platform.cpu.as_deref().unwrap_or_default().to_owned(),
                     platform.chip.clone(),
                     platform.description.clone().unwrap_or_default(),
                 ]
@@ -151,7 +150,7 @@ impl Ui {
             .collect::<Vec<_>>();
         self.section("platforms", Some(platform_rows.len()), false);
         self.print_table(
-            &["name", "firmwares", "target", "CPU", "chip", "description"],
+            &["name", "firmwares", "target", "chip", "description"],
             &platform_rows,
         );
 
@@ -240,11 +239,6 @@ impl Ui {
                     .unwrap_or_else(|| "not reported by Cargo".into()),
             ),
             ("target", platform.target.clone()),
-        ]);
-        if let Some(cpu) = &platform.cpu {
-            fields.push(("cpu", cpu.clone()));
-        }
-        fields.extend([
             ("chip", platform.chip.clone()),
             ("package", firmware.package.clone()),
             ("bin", firmware.bin.clone()),
@@ -524,13 +518,12 @@ mod tests {
 
     #[test]
     fn tables_fit_narrow_terminals_without_losing_cell_contents() {
-        let headers = ["name", "firmwares", "workspace", "target", "cpu", "chip"];
+        let headers = ["name", "firmwares", "workspace", "target", "chip"];
         let rows = vec![vec![
             "dm-mc02".into(),
             "12".into(),
             "platform/dm-mc02".into(),
             "thumbv7em-none-eabihf".into(),
-            "cortex-m7".into(),
             "STM32H723VGTx".into(),
         ]];
         for width in [20, 48, 80] {

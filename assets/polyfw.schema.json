@@ -161,13 +161,6 @@
           "description": "probe-rs chip name for hardware commands and editor sessions, for example `STM32H723VGTx`.",
           "type": "string"
         },
-        "cpu": {
-          "description": "Optional target CPU appended to the target-specific environment rustflags.\nCargo applies its native flag precedence. Omit to use Cargo's flags as supplied.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "description": {
           "description": "Optional human-readable label for platform information, independent of firmware descriptions.",
           "type": [

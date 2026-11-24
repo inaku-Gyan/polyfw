@@ -108,7 +108,7 @@ plfw info --firmware buzzer-demo --json=2 > buzzer-demo.json
 
 The overview lists all firmwares, their referenced platforms, the saved selection, and dev/release ELF
 presence. A different saved profile adds another artifact column. Details show one firmware's
-package, binary, workspace, target, any declared CPU, chip, absolute ELF paths and check dependencies.
+package, binary, workspace, target, chip, absolute ELF paths and check dependencies.
 `plfw info --firmware` opens the picker for this query without saving the choice.
 
 Platform descriptions appear in the platform overview and the firmware details. Firmware lists,
@@ -122,26 +122,32 @@ fails. An ELF marked `present` may be older than the source or differ from the r
 
 ### JSON format versions
 
-Pass `--json=2` or `--json 2` to select format version 2. Use `--json=1` or `--json 1` for format
-version 1. `--json=latest`, `--json latest` and bare `--json` select the highest format version
-supported by the running binary, currently version 2. An unsupported version fails argument
-parsing before project discovery, and the error lists the supported values.
+Pass `--json=2` or `--json 2` to pin format version 2. `--json=latest`, `--json latest` and bare
+`--json` select the highest format version supported by the running binary, currently version 2.
+An unsupported version fails argument parsing before project discovery, and the error lists the
+supported values.
 
-Format versions are independent of polyfw releases. Each numbered version fixes the JSON fields,
-types, omission rules and meanings for both views. Contract changes, including new fields, use a
-new format version. New formats ship alongside existing numbered versions. The release notes
-announce any planned removals in advance. JSON object key order and whitespace may vary.
+Format versions are independent of polyfw releases. Once released, each numbered version fixes the
+JSON fields, types, omission rules and meanings for both views. Contract changes, including new
+fields, use a new format version. New formats ship alongside existing numbered versions. The
+release notes announce any planned removals in advance. JSON object key order and whitespace may vary.
 
-Both format versions include these fields.
+Format 2 includes these fields.
 
 | Field | Meaning |
 | --- | --- |
+| `format_version` | Integer `2` |
+| `project_root` | Absolute path to the directory containing `polyfw.toml` |
 | `saved_selection` | Saved `firmware` and optional `profile`; omitted if no state exists |
-| `platforms` | Map of referenced platforms with optional `description`, declared `target` and `chip`, and `registered_firmwares` counted across the registry. Format-specific `cpu` rules are below. |
+| `platforms` | Map of referenced platforms with optional `description`, declared `target` and `chip`, and `registered_firmwares` counted across the registry |
 | `firmwares` | Map of firmwares, limited to the requested firmware when using `--firmware` |
 | `firmwares[ID].description`, `.platform`, `.package`, `.bin` | Optional description, registry values and the resolved binary name |
+| `firmwares[ID].target`, `.chip` | Values declared by the firmware's platform in `polyfw.toml` |
+| `firmwares[ID].manifest_path` | Absolute path to the firmware package's `Cargo.toml` |
 | `firmwares[ID].workspace`, `.working_dir` | Discovered Cargo workspace and actual invocation directory |
 | `firmwares[ID].target_dir`, `.build_dir` | Effective final/intermediate directories; `build_dir` is omitted if Cargo does not report it and no explicit override supplies it |
+| `firmwares[ID].artifacts` | Map from profile name to `{path, exists}` |
+| `firmwares[ID].local_dependencies` | Detail entries with `package`, absolute `manifest_path` and boolean `target_clippy` |
 
 Directory and artifact paths are absolute. Artifacts report the expected path and whether a file
 was present at that path when queried. Both views report dev, release and any different saved
@@ -150,42 +156,24 @@ Dependencies are sorted by package name and manifest path. Missing saved selecti
 and descriptions are omitted. `false`, empty arrays and explicitly supplied description strings,
 including empty strings, are retained.
 
-#### Format version 2
-
-| Field | Meaning |
-| --- | --- |
-| `format_version` | Integer `2` |
-| `project_root` | Absolute path to the directory containing `polyfw.toml` |
-| `firmwares[ID].target`, `.chip` | Values declared by the firmware's platform in `polyfw.toml` |
-| `platforms[ID].cpu`, `firmwares[ID].cpu` | Declared CPU, omitted when the platform has no `cpu` setting |
-| `firmwares[ID].manifest_path` | Absolute path to the firmware package's `Cargo.toml` |
-| `firmwares[ID].artifacts` | Map from profile name to `{path, exists}` |
-| `firmwares[ID].local_dependencies` | Detail entries with `package`, absolute `manifest_path` and boolean `target_clippy` |
-
-`target` preserves values such as `host-tuple` and relative custom target arguments. `cpu` reports
-the platform declaration even if Cargo flags override it. All reported dependencies participate
-in host checks. `target_clippy` identifies those included in target-side Clippy as well.
-
-#### Format version 1
-
-| Field | Meaning |
-| --- | --- |
-| `repository_root` | Absolute path to the directory containing `polyfw.toml` |
-| `platforms[ID].cpu` | Declared CPU string |
-| `firmwares[ID].target` | Resolved artifact target name |
-| `firmwares[ID].check_platform` | Legacy consistency-check policy, always `false` in 0.3.0 |
-| `firmwares[ID].artifacts` | Ordered `{profile, path, exists}` entries for dev, release and any different saved profile |
-| `firmwares[ID].local_dependencies` | Detail entries with `package`, `manifest_path` and `target` |
-
-Format 1 requires a CPU declaration for every platform in the report. Use format 2 for reports
-that include platforms with no CPU declaration.
-
-Dependency manifest paths are project-relative, including `../` for external packages, or absolute
-when they cannot share a filesystem prefix. A dependency's `target` is `embedded` if it participates
-in target-side Clippy and `host` otherwise.
+`target` preserves values such as `host-tuple` and relative custom target arguments. All reported
+dependencies participate in host checks. `target_clippy` identifies those included in target-side
+Clippy as well.
 
 JSON goes to stdout; interactive prompts go to stderr. Name the firmware in scripts so terminal
 availability and picker cancellation cannot change the result.
+
+#### Migrate JSON readers from 0.2.0
+
+Use `plfw info --json=2` in scripts that previously called `polyfw info --json`.
+
+| 0.2.0 field | Format 2 migration |
+| --- | --- |
+| `repository_root` | Read `project_root` |
+| `platforms[ID].cpu`, `firmwares[ID].check_platform` | These fields were removed with their [configuration settings](configuration.md#configuration-compatibility) |
+| `firmwares[ID].target` | Now the declared target argument. Use the artifact's `path` to locate the compiled binary |
+| `firmwares[ID].artifacts` | Look up the profile directly as a key, such as `artifacts.release.path` |
+| `firmwares[ID].local_dependencies` | Read absolute manifest paths and use `target_clippy: true` in place of `target: "embedded"` |
 
 ## Build, check and clean
 
@@ -215,7 +203,7 @@ Checks cover the firmware package and its configured, reachable local dependenci
 
 Checks operate on whole packages, so other binaries can be included. MCU lint is grouped by compilation context; host work and formatting retain distinct working/output
 directory contexts even when their packages share a workspace. Host work explicitly uses
-`--target host-tuple` and does not inject the Platform CPU. Other-workspace dependencies use
+`--target host-tuple`. Other-workspace dependencies use
 their own workspace-root execution environment and native output directories. Grouped commands use workspace
 defaults and unify package features. The scope is not an exact reproduction of one image's
 compilation graph. See [configuration](configuration.md#select-local-dependencies-for-checks)

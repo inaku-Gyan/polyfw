@@ -229,7 +229,7 @@ mod tests {
         fs::write(workspace.join("src/main.rs"), "fn main() {}\n").unwrap();
         fs::write(
             root.join(REGISTRY_FILE),
-            "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.test]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/test\"\nworking-dir = \"platform/test\"\n\
+            "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.test]\ntarget = \"thumbv7em-none-eabihf\"\ntarget-dir = \"target/firmware/test\"\nworking-dir = \"platform/test\"\n\
              chip = \"test-chip\"\n\
              [firmwares.test-firmware]\ndescription = \"test firmware\"\nplatform = \"test\"\n\
              package = \"test-firmware\"\n",
@@ -261,7 +261,7 @@ mod tests {
         .unwrap();
         fs::write(workspace.join("src/lib.rs"), "#![forbid(unsafe_code)]\n").unwrap();
         fs::write(workspace.join("src/main.rs"), "fn main() {}\n").unwrap();
-        let source = "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.test]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/test\"\nworking-dir = \"platform/test\"\n\
+        let source = "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.test]\ntarget = \"thumbv7em-none-eabihf\"\ntarget-dir = \"target/firmware/test\"\nworking-dir = \"platform/test\"\n\
              chip = \"test-chip\"\n\
              [firmwares.test-firmware]\ndescription = \"test firmware\"\nplatform = \"test\"\n\
              package = \"test-firmware\"\n";
@@ -341,7 +341,7 @@ mod tests {
         fs::write(workspace.join("src/lib.rs"), "#![forbid(unsafe_code)]\n").unwrap();
         fs::write(workspace.join("src/main.rs"), "fn main() {}\n").unwrap();
         fs::write(workspace.join("src/bin/robot-image.rs"), "fn main() {}\n").unwrap();
-        let source = "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.test]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/test\"\nworking-dir = \"platform/test\"\n\
+        let source = "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.test]\ntarget = \"thumbv7em-none-eabihf\"\ntarget-dir = \"target/firmware/test\"\nworking-dir = \"platform/test\"\n\
              chip = \"test-chip\"\n\
              [firmwares.test-firmware]\ndescription = \"test firmware\"\nplatform = \"test\"\n\
              package = \"test-firmware\"\n";
@@ -398,9 +398,9 @@ mod tests {
             )
             .unwrap();
         }
-        let source = "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.first-family]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/first-family\"\nworking-dir = \"platform/test\"\n\
+        let source = "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.first-family]\ntarget = \"thumbv7em-none-eabihf\"\ntarget-dir = \"target/firmware/first-family\"\nworking-dir = \"platform/test\"\n\
              chip = \"test\"\n\
-             [platforms.second-family]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/second-family\"\nworking-dir = \"platform/test\"\n\
+             [platforms.second-family]\ntarget = \"thumbv7em-none-eabihf\"\ntarget-dir = \"target/firmware/second-family\"\nworking-dir = \"platform/test\"\n\
              chip = \"test\"\n\
              [firmwares.one]\ndescription = \"first firmware\"\nplatform = \"first-family\"\n\
              package = \"firmware-a\"\nbin = \"shared-image\"\n\
@@ -461,7 +461,7 @@ mod tests {
         fs::write(workspace.join("firmware/src/main.rs"), "fn main() {}\n").unwrap();
 
         let mut registry: Registry = toml::from_str(
-            "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.test]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\ntarget-dir = \"target/firmware/test\"\nworking-dir = \"platform/test\"\n\
+            "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.test]\ntarget = \"thumbv7em-none-eabihf\"\ntarget-dir = \"target/firmware/test\"\nworking-dir = \"platform/test\"\n\
              chip = \"test-chip\"\n\
              [firmwares.test-firmware]\ndescription = \"test firmware\"\nplatform = \"test\"\n\
              package = \"test-firmware\"\n",
@@ -509,7 +509,7 @@ mod tests {
     fn compiler_overrides_are_rejected_on_firmware_entries() {
         for setting in ["target = \"thumbv7em-none-eabihf\"", "cpu = \"cortex-m7\""] {
             let source = format!(
-                "{}[platforms.test]\ntarget = \"thumbv7em-none-eabihf\"\ncpu = \"cortex-m7\"\nchip = \"test\"\nworking-dir = \".\"\n[firmwares.demo]\ndescription = \"Demo\"\nplatform = \"test\"\npackage = \"demo\"\n{setting}\n",
+                "{}[platforms.test]\ntarget = \"thumbv7em-none-eabihf\"\nchip = \"test\"\nworking-dir = \".\"\n[firmwares.demo]\ndescription = \"Demo\"\nplatform = \"test\"\npackage = \"demo\"\n{setting}\n",
                 crate::config::version::TEST_HEADER
             );
             let error = toml::from_str::<Registry>(&source).unwrap_err();
@@ -608,7 +608,7 @@ mod tests {
                 .map(|value| format!("description = {}\n", toml::Value::String(value.into())))
                 .unwrap_or_default();
             let source = format!(
-                "{}[platforms.test]\n{field}target = \"host-tuple\"\ncpu = \"native\"\nchip = \"test\"\n\
+                "{}[platforms.test]\n{field}target = \"host-tuple\"\nchip = \"test\"\n\
                  [firmwares.demo]\n{field}platform = \"test\"\npackage = \"demo\"\n",
                 crate::config::version::TEST_HEADER
             );
@@ -628,7 +628,7 @@ mod tests {
     #[test]
     fn working_directory_defaults_do_not_accept_explicit_invalid_paths() {
         let source = format!(
-            "{}[platforms.test]\ntarget = \"host-tuple\"\ncpu = \"native\"\nchip = \"test\"\n\
+            "{}[platforms.test]\ntarget = \"host-tuple\"\nchip = \"test\"\n\
              [firmwares.demo]\nplatform = \"test\"\npackage = \"demo\"\n",
             crate::config::version::TEST_HEADER
         );
@@ -689,7 +689,6 @@ mod tests {
         let platform = Platform {
             working_dir: Some("platform/dm-mc02".into()),
             target: "thumbv7em-none-eabihf".into(),
-            cpu: Some("cortex-m7".into()),
             chip: "STM32H723VGTx".into(),
             ..Platform::default()
         };
@@ -738,7 +737,6 @@ mod tests {
                     Platform {
                         working_dir: Some("platform/test".into()),
                         target: "thumbv7em-none-eabihf".into(),
-                        cpu: Some("cortex-m7".into()),
                         chip: "test-chip".into(),
                         ..Platform::default()
                     },

@@ -1,17 +1,8 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use polyfw::{FirmwareInfo, ProjectInfo};
+use polyfw::ProjectInfo;
 use serde::Serialize;
-
-#[derive(Serialize)]
-struct InfoV1<'a> {
-    repository_root: &'a Path,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    saved_selection: Option<Selection<'a>>,
-    platforms: BTreeMap<&'a str, Platform<'a>>,
-    firmwares: BTreeMap<&'a str, FirmwareV1<'a>>,
-}
 
 #[derive(Serialize)]
 struct InfoV2<'a> {
@@ -36,13 +27,11 @@ struct Platform<'a> {
     description: Option<&'a str>,
     registered_firmwares: usize,
     target: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    cpu: Option<&'a str>,
     chip: &'a str,
 }
 
 #[derive(Serialize)]
-struct FirmwareFields<'a> {
+struct FirmwareV2<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     description: Option<&'a str>,
     platform: &'a str,
@@ -53,53 +42,12 @@ struct FirmwareFields<'a> {
     target_dir: &'a Path,
     #[serde(skip_serializing_if = "Option::is_none")]
     build_dir: Option<&'a Path>,
-}
-
-impl<'a> From<&'a FirmwareInfo> for FirmwareFields<'a> {
-    fn from(firmware: &'a FirmwareInfo) -> Self {
-        Self {
-            description: firmware.description.as_deref(),
-            platform: &firmware.platform,
-            package: &firmware.package,
-            bin: &firmware.bin,
-            workspace: &firmware.workspace,
-            working_dir: &firmware.working_dir,
-            target_dir: &firmware.target_dir,
-            build_dir: firmware.build_dir.as_deref(),
-        }
-    }
-}
-
-#[derive(Serialize)]
-struct FirmwareV1<'a> {
-    #[serde(flatten)]
-    fields: FirmwareFields<'a>,
-    target: &'a str,
-    check_platform: bool,
-    artifacts: Vec<ArtifactV1<'a>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    local_dependencies: Option<Vec<DependencyV1<'a>>>,
-}
-
-#[derive(Serialize)]
-struct FirmwareV2<'a> {
-    #[serde(flatten)]
-    fields: FirmwareFields<'a>,
     manifest_path: &'a Path,
     target: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    cpu: Option<&'a str>,
     chip: &'a str,
     artifacts: BTreeMap<&'a str, ArtifactV2<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     local_dependencies: Option<Vec<DependencyV2<'a>>>,
-}
-
-#[derive(Serialize)]
-struct ArtifactV1<'a> {
-    profile: &'a str,
-    path: &'a Path,
-    exists: bool,
 }
 
 #[derive(Serialize)]
@@ -109,71 +57,10 @@ struct ArtifactV2<'a> {
 }
 
 #[derive(Serialize)]
-struct DependencyV1<'a> {
-    package: &'a str,
-    manifest_path: &'a Path,
-    target: &'static str,
-}
-
-#[derive(Serialize)]
 struct DependencyV2<'a> {
     package: &'a str,
     manifest_path: &'a Path,
     target_clippy: bool,
-}
-
-pub(crate) fn info_v1(report: &ProjectInfo) -> crate::Result<String> {
-    if let Some((id, _)) = report
-        .platforms
-        .iter()
-        .find(|(_, platform)| platform.cpu.is_none())
-    {
-        return Err(format!(
-            "JSON format 1 requires a cpu declaration for platform {id}. Use --json=2."
-        )
-        .into());
-    }
-    Ok(serde_json::to_string_pretty(&InfoV1 {
-        repository_root: &report.root,
-        saved_selection: saved_selection(report),
-        platforms: platforms(report),
-        firmwares: report
-            .firmwares
-            .iter()
-            .map(|(id, firmware)| {
-                (
-                    id.as_str(),
-                    FirmwareV1 {
-                        fields: firmware.into(),
-                        target: &firmware.target,
-                        check_platform: false,
-                        artifacts: firmware
-                            .artifacts
-                            .iter()
-                            .map(|artifact| ArtifactV1 {
-                                profile: artifact
-                                    .profile
-                                    .as_ref()
-                                    .map_or("dev", polyfw::Profile::name),
-                                path: &artifact.path,
-                                exists: artifact.exists,
-                            })
-                            .collect(),
-                        local_dependencies: firmware.local_dependencies.as_ref().map(|packages| {
-                            packages
-                                .iter()
-                                .map(|package| DependencyV1 {
-                                    package: &package.name,
-                                    manifest_path: &package.manifest_path,
-                                    target: if package.embedded { "embedded" } else { "host" },
-                                })
-                                .collect()
-                        }),
-                    },
-                )
-            })
-            .collect(),
-    })?)
 }
 
 pub(crate) fn info_v2(report: &ProjectInfo) -> serde_json::Result<String> {
@@ -190,10 +77,16 @@ pub(crate) fn info_v2(report: &ProjectInfo) -> serde_json::Result<String> {
                 (
                     id.as_str(),
                     FirmwareV2 {
-                        fields: firmware.into(),
+                        description: firmware.description.as_deref(),
+                        platform: &firmware.platform,
+                        package: &firmware.package,
+                        bin: &firmware.bin,
+                        workspace: &firmware.workspace,
+                        working_dir: &firmware.working_dir,
+                        target_dir: &firmware.target_dir,
+                        build_dir: firmware.build_dir.as_deref(),
                         manifest_path: &firmware.manifest_path,
                         target: &platform.target,
-                        cpu: platform.cpu.as_deref(),
                         chip: &platform.chip,
                         artifacts: firmware
                             .artifacts
@@ -251,7 +144,6 @@ fn platforms(report: &ProjectInfo) -> BTreeMap<&str, Platform<'_>> {
                     description: platform.description.as_deref(),
                     registered_firmwares: platform.registered_firmwares,
                     target: &platform.target,
-                    cpu: platform.cpu.as_deref(),
                     chip: &platform.chip,
                 },
             )
