@@ -68,8 +68,9 @@ plfw flash
 ```
 
 `select` saves the firmware and any explicit profile in `.polyfw-state/selected`. With editor
-generation enabled, it also writes the debug configuration. Use `plfw select` to choose in a
-searchable picker, or `plfw select --clear` to remove the state and managed launch file.
+generation enabled, it also writes the debug configuration. With generation disabled, saving a
+selection needs only the project configuration. Use `plfw select` to choose in a searchable
+picker, or `plfw select --clear` to remove the state and managed launch file.
 
 | Invocation | Firmware choice | Saved state |
 | --- | --- | --- |

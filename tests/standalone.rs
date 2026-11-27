@@ -464,6 +464,29 @@ fn a_compatible_version_does_not_bypass_strict_configuration_validation() {
 }
 
 #[test]
+fn saving_selection_with_editor_generation_disabled_needs_no_cargo() {
+    let fixture = Fixture::new("select-no-cargo");
+    fixture.project(false);
+    fs::create_dir(fixture.root.join(".vscode")).unwrap();
+    let launch = fixture.root.join(".vscode/launch.json");
+    let previous_launch = b"{ \"configurations\": [] }\n";
+    fs::write(&launch, previous_launch).unwrap();
+
+    let output = fixture
+        .command()
+        .args(["select", "firmware", "--release"])
+        .output()
+        .unwrap();
+    succeeded(&output);
+    assert_eq!(
+        fs::read_to_string(fixture.root.join(".polyfw-state/selected")).unwrap(),
+        "firmware = \"firmware\"\nprofile = \"release\"\n"
+    );
+    assert!(fixture.root.join(".polyfw-state/selection.lock").is_file());
+    assert_eq!(fs::read(&launch).unwrap(), previous_launch);
+}
+
+#[test]
 fn clearing_selection_needs_no_cargo_and_obeys_the_projects_vscode_setting() {
     for enabled in [true, false] {
         let fixture = Fixture::new(&format!("clear-{enabled}"));

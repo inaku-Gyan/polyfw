@@ -224,13 +224,21 @@ impl Project {
     }
 
     /// Saves a named or picked firmware with an optional explicit profile.
+    ///
+    /// This uses only project configuration when editor generation is disabled.
     pub fn save_selection(
         &self,
         firmware: Option<&str>,
         profile: Option<&Profile>,
         mut options: Options<'_>,
     ) -> Result<SavedSelection> {
-        let context = self.context.resolved()?;
+        let resolved;
+        let context = if self.context.registry.config.vscode.enabled {
+            resolved = self.context.resolved()?;
+            &resolved
+        } else {
+            &self.context
+        };
         let (firmware, profile) =
             context.choose_firmware(FirmwareChoice::Save(firmware), profile, &mut options)?;
         Ok(SavedSelection { firmware, profile })
