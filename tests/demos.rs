@@ -299,37 +299,165 @@ fn verify_reports_a_host_test_failure_after_formatting_and_linting() {
     assert_check_stages(&output, &["fmt", "mcu clippy", "host clippy", "test"]);
 }
 
+fn normalize_project_paths(value: &mut serde_json::Value, root: &Path) {
+    use serde_json::Value;
+
+    match value {
+        Value::String(text) => {
+            let path = Path::new(text);
+            let relative = path.strip_prefix(root);
+            // Cargo can report ordinary paths while the fixture root is verbatim.
+            #[cfg(windows)]
+            let relative = relative.or_else(|error| {
+                let ordinary = root.to_str().unwrap().strip_prefix(r"\\?\").map(Path::new);
+                match ordinary.filter(|path| path.is_absolute()) {
+                    Some(root) => path.strip_prefix(root),
+                    None => Err(error),
+                }
+            });
+            if let Ok(relative) = relative {
+                let mut normalized = String::from("$PROJECT");
+                for component in relative.components() {
+                    normalized.push('/');
+                    normalized.push_str(component.as_os_str().to_str().unwrap());
+                }
+                *text = normalized;
+            }
+        }
+        Value::Array(values) => values
+            .iter_mut()
+            .for_each(|value| normalize_project_paths(value, root)),
+        Value::Object(fields) => fields
+            .values_mut()
+            .for_each(|value| normalize_project_paths(value, root)),
+        _ => {}
+    }
+}
+
+#[test]
+fn multi_firmware_info_matches_the_json_v2_contract() {
+    use serde_json::{Value, json};
+
+    let example = Example::new("multi-firmware");
+    let config_path = example.root.join("polyfw.toml");
+    let config = fs::read_to_string(&config_path).unwrap().replace(
+        "[platforms.dm-mc02]",
+        "[platforms.dm-mc02]\ntarget-dir = \"images\"\nbuild-dir = \"intermediates\"",
+    );
+    fs::write(&config_path, &config).unwrap();
+    let report = |args: &[&str]| {
+        let mut value = example.json(args);
+        normalize_project_paths(&mut value, &example.root);
+        value
+    };
+
+    let artifact = |id: &str, directory: &str, exists: bool| {
+        json!({
+            "path": format!("$PROJECT/images/thumbv7em-none-eabihf/{directory}/{id}"),
+            "exists": exists,
+        })
+    };
+    let firmware = |id: &str| {
+        json!({
+            "platform": "dm-mc02",
+            "package": id,
+            "bin": id,
+            "workspace": "$PROJECT",
+            "working_dir": "$PROJECT",
+            "target_dir": "$PROJECT/images",
+            "build_dir": "$PROJECT/intermediates",
+            "manifest_path": format!("$PROJECT/firmwares/{id}/Cargo.toml"),
+            "target": "thumbv7em-none-eabihf",
+            "chip": "STM32H723VGTx",
+            "artifacts": {
+                "dev": artifact(id, "debug", false),
+                "release": artifact(id, "release", false),
+            },
+        })
+    };
+    let mut overview = json!({
+        "format_version": 2,
+        "project_root": "$PROJECT",
+        "platforms": {
+            "dm-mc02": {
+                "registered_firmwares": 2,
+                "target": "thumbv7em-none-eabihf",
+                "chip": "STM32H723VGTx",
+            },
+        },
+        "firmwares": {
+            "led-demo": firmware("led-demo"),
+            "buzzer-demo": firmware("buzzer-demo"),
+        },
+    });
+    let detail = |overview: &Value, id: &str, dependencies: Value| {
+        let mut detail = overview.clone();
+        let mut firmware = overview["firmwares"][id].clone();
+        firmware["local_dependencies"] = dependencies;
+        detail["firmwares"] = json!({ id: firmware });
+        detail
+    };
+
+    assert_eq!(report(&["info", "--json"]), overview);
+    assert_eq!(report(&["info", "--json=2"]), overview);
+    let common = json!([{
+        "package": "common",
+        "manifest_path": "$PROJECT/common/Cargo.toml",
+        "target_clippy": true,
+    }]);
+    for id in ["led-demo", "buzzer-demo"] {
+        let expected = detail(&overview, id, common.clone());
+        assert_eq!(report(&["info", "--firmware", id, "--json", "2"]), expected);
+        assert_eq!(report(&["info", "--firmware", id, "--json"]), expected);
+    }
+
+    let config = config
+        .replace(
+            "[platforms.dm-mc02]",
+            "[platforms.dm-mc02]\ndescription = \"\"",
+        )
+        .replace(
+            "[firmwares.led-demo]",
+            "[firmwares.led-demo]\ndescription = \"LED demo\"",
+        );
+    fs::write(&config_path, &config).unwrap();
+    example.run(&["select", "led-demo"]);
+    overview["platforms"]["dm-mc02"]["description"] = json!("");
+    overview["firmwares"]["led-demo"]["description"] = json!("LED demo");
+    overview["saved_selection"] = json!({ "firmware": "led-demo" });
+    assert_eq!(report(&["info", "--json=2"]), overview);
+
+    let config = config.replace(
+        "[config.vscode]",
+        "[config]\nlocal-dependencies = []\n\n[config.vscode]",
+    );
+    fs::write(&config_path, config).unwrap();
+    example.append_source(
+        "Cargo.toml",
+        "\n[profile.bench-debug]\ninherits = \"release\"\n",
+    );
+    example.run(&["select", "buzzer-demo", "--profile", "bench-debug"]);
+    let image = example
+        .root
+        .join("images/thumbv7em-none-eabihf/bench-debug/buzzer-demo");
+    fs::create_dir_all(image.parent().unwrap()).unwrap();
+    fs::write(image, "placeholder image").unwrap();
+
+    overview["saved_selection"] = json!({ "firmware": "buzzer-demo", "profile": "bench-debug" });
+    overview["firmwares"]["led-demo"]["artifacts"]["bench-debug"] =
+        artifact("led-demo", "bench-debug", false);
+    overview["firmwares"]["buzzer-demo"]["artifacts"]["bench-debug"] =
+        artifact("buzzer-demo", "bench-debug", true);
+    assert_eq!(report(&["info", "--json"]), overview);
+    assert_eq!(
+        report(&["info", "--firmware", "led-demo", "--json=2"]),
+        detail(&overview, "led-demo", json!([])),
+    );
+}
+
 #[test]
 fn multi_firmware_example_switches_and_checks_only_the_selected_scope() {
     let example = Example::new("multi-firmware");
-    let report = example.json(&["info", "--json=2"]);
-    assert_eq!(report["format_version"], 2);
-    assert_eq!(
-        Path::new(report["project_root"].as_str().unwrap()),
-        example.root
-    );
-    assert!(report.get("repository_root").is_none());
-    assert_eq!(report, example.json(&["info", "--json"]));
-    assert_eq!(report["firmwares"].as_object().unwrap().len(), 2);
-    let common_manifest = example
-        .root
-        .join("common/Cargo.toml")
-        .canonicalize()
-        .unwrap();
-    for id in ["led-demo", "buzzer-demo"] {
-        assert!(report["firmwares"][id].get("local_dependencies").is_none());
-        let details = example.json(&["info", "--firmware", id, "--json", "2"]);
-        assert_eq!(details, example.json(&["info", "--json", "--firmware", id]));
-        assert_eq!(
-            details["firmwares"][id]["local_dependencies"],
-            serde_json::json!([{
-                "package": "common",
-                "manifest_path": common_manifest,
-                "target_clippy": true,
-            }])
-        );
-    }
-
     example.run(&["select", "led-demo", "--release"]);
     example.run(&["build", "--all-firmwares", "--release"]);
     let report = example.json(&["info", "--json"]);
