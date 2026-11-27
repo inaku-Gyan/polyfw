@@ -1,6 +1,6 @@
 //! Inspect, build and check registered embedded Rust firmware from a host program.
 //!
-//! Use `polyfw = { version = "0.3", default-features = false }` for a library-only
+//! Use `polyfw = { version = "0.4", default-features = false }` for a library-only
 //! dependency. The default `cli` feature enables the executable and its terminal dependencies.
 //!
 //! ```no_run

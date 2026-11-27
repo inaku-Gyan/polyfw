@@ -120,7 +120,7 @@ Use the library with the CLI feature disabled in the dependency declaration.
 
 ```toml
 [dependencies]
-polyfw = { version = "0.3", default-features = false }
+polyfw = { version = "0.4", default-features = false }
 ```
 
 Here is an example building a firmware named `hello` with `release` profile:

@@ -194,9 +194,9 @@ files. Cargo output directories are configured independently. Customize the gene
 against the same platform:
 
 ```toml
-#:schema https://raw.githubusercontent.com/inaku-Gyan/polyfw/v0.3.0/assets/polyfw.schema.json
+#:schema https://raw.githubusercontent.com/inaku-Gyan/polyfw/v0.4.0/assets/polyfw.schema.json
 
-config-version = "0.3.0"
+config-version = "0.4.0"
 min-polyfw-version = "0.3.0"
 
 [config]
@@ -354,8 +354,8 @@ min-polyfw-version <= CLI.version
 
 A newer CLI can read an older configuration while that contract remains supported. An older CLI
 can also read a newer contract when the file's minimum CLI allows it and the remaining content
-passes validation. For example, a hypothetical `config-version = "0.4.0"` with
-`min-polyfw-version = "0.3.0"` allows CLI `0.3.0` when the file uses only behavior that CLI
+passes validation. For example, a file with `config-version = "0.4.0"` and
+`min-polyfw-version = "0.3.0"` works with CLI `0.3.0` when it uses only behavior that CLI
 understands. A version declaration does not make unknown fields or invalid values acceptable.
 
 Missing declarations, invalid versions, inconsistent declarations and incompatible versions

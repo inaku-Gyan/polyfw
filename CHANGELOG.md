@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.4.0]
+
+### Breaking changes
+
+- `run`, `flash`, `attach` and managed VS Code launch generation reject image paths shared by
+  different builds or chips. Set distinct `target-dir` values for the affected firmwares.
+  [Shared image check](docs/usage.md#flash-and-monitor)
+- Selection operations require `.polyfw-state` to be a directory inside the project. Replace an
+  existing symlink with a local directory and copy the saved `selected` file into it to keep your
+  selection. [Saved selection](docs/usage.md#save-a-firmware-and-profile)
+
+### Added
+
+- Exposed `Project::artifact_for_hardware` for Rust callers that need to check whether an image
+  path is shared by different builds or chips before using it with hardware.
+
+### Fixed
+
+- `plfw build` verifies that Cargo reported the registered executable, including cached builds.
+  If Cargo skips the binary because its required features are inactive, the build reports the
+  required features even when an older executable exists.
+- Resolved relative custom JSON target files from the effective Cargo working directory and
+  honored the target's `exe-suffix` when locating executables.
+- Preserved literal backslashes in generated VS Code debug paths on Unix.
+
 ## [0.3.0]
 
 ### Breaking changes
@@ -64,6 +89,7 @@
   Schema with `schema`.
 - Install from crates.io or use prebuilt Linux, macOS and Windows archives from GitHub Releases.
 
+[0.4.0]: https://github.com/inaku-Gyan/polyfw/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/inaku-Gyan/polyfw/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/inaku-Gyan/polyfw/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/inaku-Gyan/polyfw/releases/tag/v0.1.0

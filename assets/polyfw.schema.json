@@ -1,5 +1,5 @@
 {
-  "$id": "https://raw.githubusercontent.com/inaku-Gyan/polyfw/v0.3.0/assets/polyfw.schema.json",
+  "$id": "https://raw.githubusercontent.com/inaku-Gyan/polyfw/v0.4.0/assets/polyfw.schema.json",
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "polyfw registry",
   "description": "Project configuration for registered embedded firmware.\nCargo metadata additionally validates firmware workspace membership and binary targets at runtime.",
