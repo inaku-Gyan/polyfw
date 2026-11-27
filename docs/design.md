@@ -123,8 +123,10 @@ Canonical manifests identify packages, keeping identical package names in differ
 4. Normal edges preserve compilation role; build/dev edges and proc macros switch to host.
    A package reached in both roles receives both checks.
 
-Metadata caches retain execution contexts rather than only workspace roots. Ownership mappings
-come from metadata.workspace_root, never from the invocation directory. MCU scopes preserve
+The metadata cache retains the Cargo execution context. To discover an external
+dependency's owner, run `cargo locate-project --workspace` from the working directory that supplied
+its metadata, passing the absolute dependency manifest path. Record ownership from
+`metadata.workspace_root`. MCU scopes preserve
 compilation target and directory context. Host and formatting scopes
 deduplicate by their actual execution/directory context. Other-workspace dependencies use their
 own workspace root and native directories, even if another firmware registers that workspace.

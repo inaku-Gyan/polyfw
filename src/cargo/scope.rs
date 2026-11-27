@@ -72,10 +72,15 @@ pub(crate) fn resolve(
 
 type MetadataKey = (CargoContext, Option<String>);
 
+struct WorkspaceMetadata {
+    working_dir: PathBuf,
+    data: Metadata,
+}
+
 struct Resolver {
     root: PathBuf,
     local_dependencies: LocalDependencies,
-    metadata: BTreeMap<MetadataKey, Rc<Metadata>>,
+    metadata: BTreeMap<MetadataKey, Rc<WorkspaceMetadata>>,
     manifests: BTreeMap<PathBuf, PathBuf>,
     owners: BTreeMap<PathBuf, (PathBuf, String)>,
 }
@@ -106,7 +111,7 @@ impl Resolver {
         Ok(Some(manifest))
     }
 
-    fn metadata(&mut self, workspace: &Path) -> Result<Rc<Metadata>> {
+    fn metadata(&mut self, workspace: &Path) -> Result<Rc<WorkspaceMetadata>> {
         let cargo = CargoContext {
             working_dir: canonical(workspace)?,
             ..CargoContext::default()
@@ -114,44 +119,52 @@ impl Resolver {
         self.metadata_for(&cargo, None)
     }
 
-    fn metadata_for(&mut self, cargo: &CargoContext, target: Option<&str>) -> Result<Rc<Metadata>> {
+    fn metadata_for(
+        &mut self,
+        cargo: &CargoContext,
+        target: Option<&str>,
+    ) -> Result<Rc<WorkspaceMetadata>> {
         let key = (cargo.clone(), target.map(str::to_owned));
         if let Some(metadata) = self.metadata.get(&key) {
             return Ok(Rc::clone(metadata));
         }
-        let metadata = Rc::new(cargo_metadata_for(cargo, target, true)?);
-        let owner = canonical(Path::new(&metadata.workspace_root))?;
-        for package in &metadata.packages {
-            if metadata.workspace_members.contains(&package.id)
+        let data = cargo_metadata_for(cargo, target, true)?;
+        let owner = canonical(Path::new(&data.workspace_root))?;
+        for package in &data.packages {
+            if data.workspace_members.contains(&package.id)
                 && let Some(manifest) = self.path_manifest(package)?
             {
                 self.owners
                     .insert(manifest, (owner.clone(), package.id.clone()));
             }
         }
+        let metadata = Rc::new(WorkspaceMetadata {
+            working_dir: cargo.working_dir.clone(),
+            data,
+        });
         self.metadata.insert(key, Rc::clone(&metadata));
         Ok(metadata)
     }
 
-    fn owner(&mut self, manifest: &Path) -> Result<(PathBuf, String)> {
+    fn owner(&mut self, working_dir: &Path, manifest: &Path) -> Result<(PathBuf, String)> {
         if let Some(owner) = self.owners.get(manifest) {
             return Ok(owner.clone());
         }
-        let output =
-            runner::workspace_cargo(manifest.parent().ok_or("package manifest has no parent")?)
-                .args([
-                    "locate-project",
-                    "--workspace",
-                    "--message-format",
-                    "plain",
-                    "--manifest-path",
-                ])
-                .arg(manifest)
-                .output()?;
+        let output = runner::workspace_cargo(working_dir)
+            .args([
+                "locate-project",
+                "--workspace",
+                "--message-format",
+                "plain",
+                "--manifest-path",
+            ])
+            .arg(manifest)
+            .output()?;
         if !output.status.success() {
             return Err(format!(
-                "cargo locate-project failed for {}: {}",
+                "cargo locate-project failed for {} from {}: {}",
                 manifest.display(),
+                working_dir.display(),
                 String::from_utf8_lossy(&output.stderr).trim()
             )
             .into());
@@ -186,6 +199,7 @@ impl Resolver {
             .filter(|entry| same_context(entry, selection))
         {
             let package = firmware_metadata
+                .data
                 .workspace_package(&entry.firmware.package)
                 .ok_or_else(|| {
                     format!(
@@ -211,6 +225,7 @@ impl Resolver {
         let mut packages = BTreeMap::<PathBuf, PackageScope>::new();
         while let Some((metadata, id, role)) = pending.pop() {
             let package = metadata
+                .data
                 .packages
                 .iter()
                 .find(|package| package.id == id)
@@ -239,19 +254,19 @@ impl Resolver {
                         entry.id = id.clone();
                     }
                 } else {
-                    let (owner, host_id) = self.owner(&manifest)?;
+                    let (owner, host_id) = self.owner(&metadata.working_dir, &manifest)?;
                     let (host_metadata, host_cargo) = if owner == cargo.workspace {
                         (Rc::clone(&firmware_metadata), cargo.clone())
                     } else {
-                        let data = self.metadata(&owner)?;
+                        let owner_metadata = self.metadata(&owner)?;
                         let host_cargo = CargoContext {
                             working_dir: owner.clone(),
                             workspace: owner,
-                            target_dir: data.target_directory.clone(),
-                            build_dir: data.build_directory.clone(),
+                            target_dir: owner_metadata.data.target_directory.clone(),
+                            build_dir: owner_metadata.data.build_directory.clone(),
                             ..CargoContext::default()
                         };
-                        (data, host_cargo)
+                        (owner_metadata, host_cargo)
                     };
                     pending.push((host_metadata, host_id.clone(), CompilationTarget::Host));
                     packages.insert(
@@ -269,6 +284,7 @@ impl Resolver {
                 }
             }
             let graph = metadata
+                .data
                 .resolve
                 .as_ref()
                 .ok_or("Cargo metadata has no dependency graph")?;

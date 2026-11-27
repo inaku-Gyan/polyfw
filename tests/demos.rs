@@ -566,6 +566,45 @@ fn multi_workspace_example_reports_external_members_and_shared_scopes() {
 }
 
 #[test]
+fn a_dependency_member_uses_its_owners_toolchain_for_host_tests() {
+    let example = Example::new("multi-workspace");
+    let member = example.root.join("shared/patterns");
+    let unavailable_toolchain = member.join("unavailable-toolchain");
+    fs::create_dir(&unavailable_toolchain).unwrap();
+    let path = toml::Value::String(unavailable_toolchain.display().to_string());
+    fs::write(
+        member.join("rust-toolchain.toml"),
+        format!("[toolchain]\npath = {path}\n"),
+    )
+    .unwrap();
+    failed(
+        support::workspace_cargo(&member)
+            .arg("--version")
+            .env("RUSTUP_AUTO_INSTALL", "0")
+            .output()
+            .unwrap(),
+        "unavailable-toolchain",
+    );
+
+    let details = example.json(&["info", "--firmware", "led-1", "--json"]);
+    let dependencies = details["firmwares"]["led-1"]["local_dependencies"]
+        .as_array()
+        .unwrap();
+    assert!(
+        dependencies
+            .iter()
+            .any(|dependency| dependency["package"] == "patterns"),
+        "{details}"
+    );
+    let output = example.run(&["test", "led-1"]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("test tests::pulse_patterns_have_nonzero_on_and_off_durations ... ok"),
+        "{stdout}"
+    );
+}
+
+#[test]
 fn multi_workspace_example_builds_selected_bins_and_all_firmwares() {
     let example = Example::new("multi-workspace");
     example.run(&["select", "led-1", "--release"]);
