@@ -182,6 +182,10 @@ that polyfw includes reachable shared dependencies and excludes unrelated packag
 cases for each shared library. The multi-workspace example also contains passing host tests for
 pulse timing and LED rate selection; its integration test checks that these tests actually run.
 
+The multi-firmware target-condition test adds a host simulator and an MCU-conditional dependency
+in a temporary copy. It checks `target_clippy` in detailed `info`, runs both Clippy stages and
+verifies that both dependencies' own host tests execute.
+
 Failure fixtures check that `verify` runs formatting, MCU Clippy, host Clippy and host tests in
 order, stops at the failing stage, and leaves sources unchanged during format checking. A failed
 build after `--select` must retain the newly saved firmware and profile. Cleanup tests start with

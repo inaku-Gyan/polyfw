@@ -127,7 +127,7 @@ fn failed_test(output: Output, marker: &str) -> Output {
     output
 }
 
-fn assert_verify_stages(output: &Output, expected: &[&str]) {
+fn assert_check_stages(output: &Output, expected: &[&str]) {
     let stderr = String::from_utf8_lossy(&output.stderr);
     let stages = stderr
         .lines()
@@ -137,7 +137,7 @@ fn assert_verify_stages(output: &Output, expected: &[&str]) {
             "clippy" if command.contains("--target host-tuple") => "host clippy",
             "clippy" => "mcu clippy",
             "test" => "test",
-            _ => panic!("unexpected verify command: {command}"),
+            _ => panic!("unexpected check command: {command}"),
         })
         .collect::<Vec<_>>();
     assert_eq!(stages, expected, "stderr:\n{stderr}");
@@ -239,7 +239,7 @@ fn minimal_example_discovers_selects_and_builds_the_reported_artifact() {
 fn minimal_example_verifies_the_hardware_only_binary() {
     let example = Example::new("minimal");
     let output = example.run(&["verify", "--all-firmwares"]);
-    assert_verify_stages(&output, &["fmt", "mcu clippy", "test"]);
+    assert_check_stages(&output, &["fmt", "mcu clippy", "test"]);
 }
 
 #[test]
@@ -253,7 +253,7 @@ fn minimal_example_verify_stops_after_a_formatting_failure_without_rewriting_sou
         example.command(&["verify", "blinky"]).output().unwrap(),
         "Diff in",
     );
-    assert_verify_stages(&output, &["fmt"]);
+    assert_check_stages(&output, &["fmt"]);
     assert_eq!(fs::read(path).unwrap(), source);
 }
 
@@ -269,7 +269,7 @@ fn minimal_example_verify_stops_after_an_mcu_lint_failure() {
         example.command(&["verify", "blinky"]).output().unwrap(),
         "clippy::len_zero",
     );
-    assert_verify_stages(&output, &["fmt", "mcu clippy"]);
+    assert_check_stages(&output, &["fmt", "mcu clippy"]);
 }
 
 #[test]
@@ -284,7 +284,7 @@ fn verify_stops_after_a_host_lint_failure() {
         example.command(&["verify", "led-demo"]).output().unwrap(),
         "clippy::len_zero",
     );
-    assert_verify_stages(&output, &["fmt", "mcu clippy", "host clippy"]);
+    assert_check_stages(&output, &["fmt", "mcu clippy", "host clippy"]);
 }
 
 #[test]
@@ -296,7 +296,7 @@ fn verify_reports_a_host_test_failure_after_formatting_and_linting() {
         example.command(&["verify", "led-demo"]).output().unwrap(),
         "verify host test sentinel",
     );
-    assert_verify_stages(&output, &["fmt", "mcu clippy", "host clippy", "test"]);
+    assert_check_stages(&output, &["fmt", "mcu clippy", "host clippy", "test"]);
 }
 
 #[test]
@@ -352,6 +352,90 @@ fn multi_firmware_example_switches_and_checks_only_the_selected_scope() {
     );
     example.run(&["test", "led-demo"]);
     example.assert_test_fails("--all-firmwares", "unselected firmware test");
+}
+
+#[test]
+fn multi_firmware_example_respects_target_conditions_for_checks() {
+    let example = Example::new("multi-firmware");
+    let manifest = example.root.join("firmwares/led-demo/Cargo.toml");
+    let source = fs::read_to_string(&manifest).unwrap().replace("\r\n", "\n");
+    let mcu_manifest = source.replace(
+        "[dependencies]\ncommon = { path = \"../../common\" }\n",
+        "[target.thumbv7em-none-eabihf.dependencies]\ncommon = { path = \"../../common\" }\n",
+    );
+    assert_ne!(source, mcu_manifest, "the demo's common dependency changed");
+    fs::write(&manifest, mcu_manifest).unwrap();
+    example.append_source(
+        "firmwares/led-demo/Cargo.toml",
+        "\n[target.'cfg(not(target_os = \"none\"))'.dependencies]\n\
+         simulator = { path = \"../../simulator\" }\n",
+    );
+    fs::create_dir_all(example.root.join("simulator/src")).unwrap();
+    fs::write(
+        example.root.join("simulator/Cargo.toml"),
+        "[package]\nname = \"simulator\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    )
+    .unwrap();
+    fs::write(
+        example.root.join("simulator/src/lib.rs"),
+        "pub fn value() -> u8 {\n    std::io::Cursor::new([42]).into_inner()[0]\n}\n\n\
+         #[test]\nfn simulator_reads_its_default_value() {\n    assert_eq!(value(), 42);\n}\n",
+    )
+    .unwrap();
+    let source_path = example.root.join("firmwares/led-demo/src/lib.rs");
+    let source = fs::read_to_string(&source_path)
+        .unwrap()
+        .replace("\r\n", "\n");
+    fs::write(
+        &source_path,
+        source.replace(
+            "pub fn value() -> u8 {\n    common::value()\n}",
+            "#[cfg(target_os = \"none\")]\npub use common::value;\n\n\
+             #[cfg(not(target_os = \"none\"))]\npub use simulator::value;",
+        ),
+    )
+    .unwrap();
+    example.append_source(
+        "common/src/lib.rs",
+        "\n#[test]\nfn mcu_dependency_runs_its_own_host_test() {\n    assert_eq!(value(), 42);\n}\n",
+    );
+    succeeded(
+        support::workspace_cargo(&example.root)
+            .args(["update", "--workspace"])
+            .output()
+            .unwrap(),
+    );
+
+    let report = example.json(&["info", "--firmware", "led-demo", "--json"]);
+    assert_eq!(
+        report["firmwares"]["led-demo"]["local_dependencies"],
+        serde_json::json!([
+            {
+                "package": "common",
+                "manifest_path": example.root.join("common/Cargo.toml"),
+                "target_clippy": true,
+            },
+            {
+                "package": "simulator",
+                "manifest_path": example.root.join("simulator/Cargo.toml"),
+                "target_clippy": false,
+            },
+        ])
+    );
+    let output = example.run(&["lint", "led-demo"]);
+    assert_check_stages(&output, &["mcu clippy", "host clippy"]);
+
+    let output = example.run(&["test", "led-demo"]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for name in [
+        "simulator_reads_its_default_value",
+        "mcu_dependency_runs_its_own_host_test",
+    ] {
+        assert!(
+            stdout.contains(&format!("test {name} ... ok")),
+            "host test {name} did not run successfully\nstdout:\n{stdout}"
+        );
+    }
 }
 
 #[cfg(target_os = "linux")]
