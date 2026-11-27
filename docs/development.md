@@ -125,9 +125,10 @@ Canonicalize temporary roots before writing relative or absolute path dependenci
 collisions. Fixtures do not need a `TMPDIR` override. Tests expecting a compiler failure must check
 the intended diagnostic so an unrelated setup failure cannot count as success.
 
-Ordinary fixture builds may emit unused-dependency warnings. CI explicitly allows those build
-warnings; the repository's Clippy command still uses `-D warnings`. Hardware command and debugger
-fixtures establish generated arguments/settings, not physical device behavior.
+Ordinary fixture builds may emit unused-dependency warnings. CI allows those build warnings,
+and the repository's Clippy command enforces `-D warnings`. Hardware command fixtures use a fake
+`probe-rs` to record the working directory and arguments and simulate child failures. Debugger
+fixtures check the generated editor settings.
 
 ## Run focused tests
 
@@ -211,9 +212,11 @@ inherits the caller's network settings. With dependencies cached and the target 
 
 ## Understand repository automation
 
-CI runs `just check` followed by `cargo build --locked --release` on pushes to `main` and non-draft
-pull requests, skipping Markdown-only changes. Tagged releases invoke the same workflow before
-building the native release binaries.
+CI runs `just check` followed by `cargo build --locked --release` on Linux. The Windows MSVC job
+checks Cargo output paths and builds and runs host consumer binaries with a shared intermediate
+directory and separate final output directories. CI runs on pushes to `main` and non-draft pull
+requests, skipping Markdown-only changes. Tagged releases invoke the same workflow before building
+the native release binaries.
 
 Coverage runs on the same `main` pushes and non-draft pull requests. The run summary shows line
 coverage, and the `coverage-html` artifact contains the full HTML report. The workflow uploads LCOV

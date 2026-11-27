@@ -1222,21 +1222,58 @@ fn assert_broken_buzzer_workspace(output: &Output) {
 fn shared_intermediates_keep_same_named_final_images_independent() {
     let fixture = Project::new("split-outputs");
     fixture.split_workspaces();
+    let cache = fixture.root.join("shared build cache");
+    let destinations = [
+        ("led-demo", fixture.root.join("led images")),
+        ("buzzer-demo", fixture.root.join("buzzer images")),
+    ];
+    fs::create_dir(&cache).unwrap();
+    for (_, directory) in &destinations {
+        fs::create_dir(directory).unwrap();
+    }
+    let build_script = r#"
+fn main() {
+    let out_dir = std::fs::canonicalize(std::env::var_os("OUT_DIR").unwrap()).unwrap();
+    let cache = std::fs::canonicalize(std::env::var_os("POLYFW_TEST_BUILD_CACHE").unwrap()).unwrap();
+    assert!(out_dir.starts_with(&cache), "OUT_DIR {out_dir:?} is outside the shared cache {cache:?}");
+}
+"#;
+    for package in [
+        fixture.workspace.join("led-demo"),
+        fixture.root.join("buzzer-workspace"),
+    ] {
+        fs::write(package.join("build.rs"), build_script).unwrap();
+    }
     fixture.config(
-        "build-dir = \"../cache\"",
-        "target-dir = \"../images/led\"",
-        "target-dir = \"../images/buzzer\"\nworking-dir = \"../buzzer-workspace\"",
+        "build-dir = \"../shared build cache\"",
+        "target-dir = \"../led images\"",
+        "target-dir = \"../buzzer images\"\nworking-dir = \"../buzzer-workspace\"",
     );
     for id in ["led-demo", "buzzer-demo", "led-demo"] {
-        succeed(fixture.command(&["build", id]).output().unwrap());
+        succeed(
+            fixture
+                .command(&["build", id])
+                .env("POLYFW_TEST_BUILD_CACHE", &cache)
+                .output()
+                .unwrap(),
+        );
     }
     let info = fixture.info();
-    for id in ["led-demo", "buzzer-demo"] {
+    for (id, destination) in destinations {
         let artifact = &info["firmwares"][id]["artifacts"]["dev"];
-        let image = artifact["path"].as_str().unwrap();
+        let image = Path::new(artifact["path"].as_str().unwrap());
+        assert_eq!(artifact["exists"], true);
+        let name = format!("demo-image{}", std::env::consts::EXE_SUFFIX);
+        assert_eq!(image.file_name().unwrap(), name.as_str());
+        assert!(
+            image
+                .canonicalize()
+                .unwrap()
+                .starts_with(destination.canonicalize().unwrap()),
+            "{id} image {image:?} is outside {destination:?}"
+        );
         let output = succeed(Command::new(image).output().unwrap());
         assert_eq!(String::from_utf8(output.stdout).unwrap().trim(), id);
-        assert_eq!(artifact["exists"], true);
     }
 }
 
