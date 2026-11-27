@@ -206,6 +206,28 @@ impl Project {
         command
     }
 
+    #[cfg(unix)]
+    fn install_fake_probe(&self) -> (std::ffi::OsString, PathBuf) {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tools = self.root.join("tools");
+        fs::create_dir(&tools).unwrap();
+        let probe = tools.join("probe-rs");
+        fs::write(
+            &probe,
+            r#"#!/bin/sh
+printf '%s\0' "$(pwd -P)" "$@" > "$POLYFW_TEST_PROBE_LOG"
+exit "${POLYFW_TEST_PROBE_STATUS:-0}"
+"#,
+        )
+        .unwrap();
+        fs::set_permissions(probe, fs::Permissions::from_mode(0o755)).unwrap();
+        let path = std::env::var_os("PATH").unwrap();
+        let path = std::env::join_paths(std::iter::once(tools).chain(std::env::split_paths(&path)))
+            .unwrap();
+        (path, self.root.join("probe-args"))
+    }
+
     fn info(&self) -> serde_json::Value {
         serde_json::from_slice(&succeed(self.command(&["info", "--json"]).output().unwrap()).stdout)
             .unwrap()
@@ -247,9 +269,141 @@ fn assert_ambiguous_image(output: Output, firmwares: [&str; 2], image: &str) {
 
 #[cfg(unix)]
 #[test]
-fn probe_actions_reject_shared_images_from_different_workspaces() {
-    use std::os::unix::fs::PermissionsExt;
+fn hardware_commands_use_the_selected_image_and_report_probe_failures() {
+    let fixture = Project::new("probe-dispatch");
+    fixture.config(
+        "[config.vscode]\nenabled = false",
+        "target-dir = \"../led images\"",
+        "target-dir = \"../buzzer images\"",
+    );
+    fs::write(
+        fixture.workspace.join("led-demo/src/main.rs"),
+        "compile_error!(\"hardware commands must not build firmware\");\n",
+    )
+    .unwrap();
+    let host = succeed(
+        support::workspace_command(&fixture.workspace, "rustc")
+            .args(["--print", "host-tuple"])
+            .output()
+            .unwrap(),
+    );
+    let host = std::str::from_utf8(&host.stdout).unwrap().trim();
+    let images = fixture.root.join("led images").join(host);
+    let dev = images.join("debug/demo-image");
+    let release = images.join("release/demo-image");
+    for image in [&dev, &release] {
+        fs::create_dir_all(image.parent().unwrap()).unwrap();
+        fs::write(image, "placeholder image").unwrap();
+    }
 
+    let (path, log) = fixture.install_fake_probe();
+    let command = |args: &[&str]| {
+        let mut command = fixture.command(args);
+        command
+            .current_dir(&fixture.root)
+            .arg("--project-root")
+            .arg(&fixture.project)
+            .env("PATH", &path)
+            .env("POLYFW_TEST_PROBE_LOG", &log)
+            .env("POLYFW_TEST_PROBE_STATUS", "0");
+        command
+    };
+    succeed(
+        command(&["select", "led-demo", "--profile", "release"])
+            .output()
+            .unwrap(),
+    );
+
+    let serial = "1234:5678:serial with spaces";
+    let cases: [(&[&str], &[&str]); 3] = [
+        (
+            &["run"],
+            &[
+                "run",
+                "--chip",
+                "test-chip",
+                release.to_str().unwrap(),
+                "--verify",
+                "--rtt-channel-mode",
+                "no-block-skip",
+            ],
+        ),
+        (
+            &["flash", "--profile", "dev"],
+            &[
+                "download",
+                "--chip",
+                "test-chip",
+                dev.to_str().unwrap(),
+                "--verify",
+                "--reset",
+            ],
+        ),
+        (
+            &[
+                "attach",
+                "--probe",
+                serial,
+                "--speed",
+                "4000",
+                "--connect-under-reset",
+                "--rtt-channel-mode",
+                "no-block-trim",
+                "--no-catch-reset",
+                "--no-catch-hardfault",
+            ],
+            &[
+                "attach",
+                "--chip",
+                "test-chip",
+                "--probe",
+                serial,
+                "--speed",
+                "4000",
+                "--connect-under-reset",
+                release.to_str().unwrap(),
+                "--rtt-channel-mode",
+                "no-block-trim",
+                "--no-catch-reset",
+                "--no-catch-hardfault",
+            ],
+        ),
+    ];
+    for (args, expected) in cases {
+        succeed(command(args).output().unwrap());
+        let invocation = fs::read_to_string(&log).unwrap();
+        let mut fields = invocation.split_terminator('\0');
+        assert_eq!(Path::new(fields.next().unwrap()), fixture.project);
+        assert_eq!(fields.collect::<Vec<_>>(), expected);
+        fs::remove_file(&log).unwrap();
+    }
+
+    let output = command(&["attach"])
+        .env("POLYFW_TEST_PROBE_STATUS", "23")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("failed with exit status: 23"), "{stderr}");
+    fs::remove_file(&log).unwrap();
+
+    fs::remove_file(&release).unwrap();
+    let diagnostic = format!(
+        "ELF not found: {}; build it with plfw build led-demo --profile release",
+        release.display()
+    );
+    for action in ["run", "flash", "attach"] {
+        let output = command(&[action]).output().unwrap();
+        assert_eq!(output.status.code(), Some(1));
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains(&diagnostic), "{action}: {stderr}");
+        assert!(!log.exists(), "{action} launched probe-rs");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn probe_actions_reject_shared_images_from_different_workspaces() {
     let fixture = Project::new("ambiguous-probe-image");
     fixture.split_workspaces();
     fixture.config(
@@ -271,19 +425,7 @@ fn probe_actions_reject_shared_images_from_different_workspaces() {
     assert_eq!(led["exists"], true);
     assert_eq!(buzzer["exists"], true);
 
-    let tools = fixture.root.join("tools");
-    fs::create_dir(&tools).unwrap();
-    let probe = tools.join("probe-rs");
-    fs::write(
-        &probe,
-        "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$POLYFW_TEST_PROBE_LOG\"\n",
-    )
-    .unwrap();
-    fs::set_permissions(probe, fs::Permissions::from_mode(0o755)).unwrap();
-    let path = std::env::var_os("PATH").unwrap();
-    let path =
-        std::env::join_paths(std::iter::once(tools).chain(std::env::split_paths(&path))).unwrap();
-    let log = fixture.root.join("probe-args");
+    let (path, log) = fixture.install_fake_probe();
     for action in ["flash", "run", "attach"] {
         let output = fixture
             .command(&[action, "led-demo", "--release"])
