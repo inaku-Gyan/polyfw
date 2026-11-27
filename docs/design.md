@@ -32,8 +32,8 @@ library queries to obtain the firmware, chip and ELF for hardware actions.
 
 `Project::open` reads and validates configuration at an exact root. `Project::discover` opens
 the nearest registry from a given directory. The project keeps a configuration snapshot.
-Firmware and platform lists are available from that snapshot, and operations that need Cargo
-resolve it once per call. Reopen the project to read configuration edits.
+Firmware and platform lists are available from that snapshot. Operations resolve Cargo context
+on demand. Reopen the project to read configuration edits.
 
 Pass a firmware ID directly for an explicit build, or use `FirmwareChoice` to request saved-state
 inheritance or persistence. When the choice requires input, the calling program can supply a
@@ -66,9 +66,10 @@ Loading has two stages:
 2. Cargo resolution independently resolves each Firmware's inherited directories, invokes metadata
    there, discovers workspace membership/binaries, and records Cargo's effective output paths.
 
-Most commands resolve every registered firmware. Clearing selection only loads configuration and
-does not parse old state. Reset also uses configuration alone unless saving selection must generate
-an editor launch file. Dependency graphs are loaded for checks and detailed info.
+Firmware choice uses configuration and any required state before Cargo resolution. Resolution
+loads the registrations needed by the [command](usage.md#cargo-workspace-resolution), sharing
+metadata for identical contexts during that pass. Checks and detailed info also load dependency
+graphs. Clearing selection only loads configuration and skips parsing old state.
 
 Cargo validation requires a library and at least one binary, counting feature-gated binaries
 independently of default-run. An omitted bin is resolved for artifact lookup and build verification
@@ -186,7 +187,9 @@ The lock covers launch and selection file changes, including rollback, and is re
 operation ends. Once created, the lock file stays in place through clears so concurrent writers
 always lock the same file.
 
-A save may precede a build or hardware action. Its success is retained if the later action fails.
+A command that saves and performs an action resolves its required firmware Cargo contexts before
+the save. It runs any check planning and subsequent action after the save succeeds. A successful
+save is retained if the later action fails.
 With editor generation enabled, the save first replaces the launch file, then writes selection
 state. If the state write fails, it restores the previous launch bytes or removes the newly created
 file. Each replacement uses a temporary file, rename and cleanup guard. This is rollback between

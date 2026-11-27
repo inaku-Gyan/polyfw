@@ -179,6 +179,21 @@ Use `plfw info --json=2` in scripts that previously called `polyfw info --json`.
 | `firmwares[ID].artifacts` | Look up the profile directly as a key, such as `artifacts.release.path` |
 | `firmwares[ID].local_dependencies` | Read absolute manifest paths and use `target_clippy: true` in place of `target: "embedded"` |
 
+## Cargo workspace resolution
+
+Opening a project validates the whole `polyfw.toml`. Cargo validation follows the command's scope.
+
+| Command | Cargo scope |
+| --- | --- |
+| Single-firmware `build`, `fmt`, `lint`, `test`, `verify`, and `info --firmware` | The selected firmware and the dependencies the command needs |
+| Single-firmware `clean` | Registrations with the selected `package` value, to report which share output directories |
+| `info` overview and `--all-firmwares` | All registered firmwares |
+| `run`, `flash`, `attach`, and any selection save that generates a debug configuration | All registered firmwares, to check for [shared image paths](#flash-and-monitor) |
+| Standalone `select` with editor generation disabled, `select --clear`, and `reset` without a managed editor save | Configuration only |
+
+Cargo may load other members of the selected workspace. Checks and firmware details also follow
+the [configured local dependency scope](configuration.md#select-local-dependencies-for-checks).
+
 ## Build, check and clean
 
 ```sh

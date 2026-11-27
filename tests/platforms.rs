@@ -183,6 +183,18 @@ impl Project {
         }
     }
 
+    fn with_broken_buzzer_workspace(label: &str) -> Self {
+        let fixture = Self::new(label);
+        fixture.split_workspaces();
+        fixture.config("", "", "working-dir = \"../buzzer-workspace\"");
+        fs::write(
+            fixture.root.join("buzzer-workspace/Cargo.toml"),
+            "[package\n",
+        )
+        .unwrap();
+        fixture
+    }
+
     fn command(&self, args: &[&str]) -> Command {
         let mut command = support::plfw();
         command
@@ -903,6 +915,140 @@ fn an_rlib_example_does_not_count_as_a_firmware_library() {
         error.contains("package led-demo has no library target"),
         "{error}"
     );
+}
+
+#[test]
+fn a_build_or_check_uses_the_requested_firmware_workspace() {
+    let fixture = Project::with_broken_buzzer_workspace("build-scope");
+    for command in ["build", "test"] {
+        succeed(fixture.command(&[command, "led-demo"]).output().unwrap());
+        assert_broken_buzzer_workspace(
+            &fixture
+                .command(&[command, "--all-firmwares"])
+                .output()
+                .unwrap(),
+        );
+    }
+    assert_broken_buzzer_workspace(&fixture.command(&["build", "buzzer-demo"]).output().unwrap());
+}
+
+#[test]
+fn saving_during_a_build_validates_the_required_workspaces_first() {
+    let fixture = Project::with_broken_buzzer_workspace("build-save-scope");
+    let state = fixture.project.join(".polyfw-state/selected");
+    let launch = fixture.project.join(".vscode/launch.json");
+    for args in [
+        ["select", "led-demo"].as_slice(),
+        &["build", "--select", "led-demo"],
+    ] {
+        assert_broken_buzzer_workspace(&fixture.command(args).output().unwrap());
+        assert!(!state.exists());
+        assert!(!launch.exists());
+    }
+
+    let config = fixture.project.join("polyfw.toml");
+    let source = fs::read_to_string(&config).unwrap();
+    fs::write(
+        &config,
+        format!("{source}\n[config.vscode]\nenabled = false\n"),
+    )
+    .unwrap();
+    succeed(
+        fixture
+            .command(&["build", "--select", "led-demo", "--release"])
+            .output()
+            .unwrap(),
+    );
+    succeed(fixture.command(&["build"]).output().unwrap());
+    let saved = "firmware = \"led-demo\"\nprofile = \"release\"\n";
+    assert_eq!(fs::read_to_string(&state).unwrap(), saved);
+    assert!(!launch.exists());
+
+    assert_broken_buzzer_workspace(
+        &fixture
+            .command(&["build", "--select", "buzzer-demo", "--dev"])
+            .output()
+            .unwrap(),
+    );
+    assert_eq!(fs::read_to_string(state).unwrap(), saved);
+    assert!(!launch.exists());
+}
+
+#[test]
+fn detailed_info_uses_the_requested_firmware_workspace() {
+    let fixture = Project::with_broken_buzzer_workspace("info-scope");
+    let output = succeed(
+        fixture
+            .command(&["info", "--firmware", "led-demo", "--json"])
+            .output()
+            .unwrap(),
+    );
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["firmwares"].as_object().unwrap().len(), 1);
+    assert_eq!(report["firmwares"]["led-demo"]["bin"], "demo-image");
+    assert_eq!(report["platforms"]["demo-board"]["registered_firmwares"], 2);
+
+    let output = fixture.command(&["info", "--json"]).output().unwrap();
+    assert!(output.stdout.is_empty());
+    assert_broken_buzzer_workspace(&output);
+}
+
+#[test]
+fn querying_an_artifact_needs_only_its_firmware_but_hardware_checks_need_the_registry() {
+    use polyfw::{ErrorKind, FirmwareChoice, Options};
+
+    let fixture = Project::with_broken_buzzer_workspace("artifact-scope");
+    let project = polyfw::Project::open(&fixture.project).unwrap();
+    let choice = FirmwareChoice::Explicit("led-demo");
+
+    let artifact = project.artifact(choice, None, Options::default()).unwrap();
+    assert_eq!(artifact.firmware, "led-demo");
+    assert!(artifact.path.is_absolute());
+
+    let error = project
+        .artifact_for_hardware(choice, None, Options::default())
+        .unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::Cargo);
+    assert!(error.to_string().contains("buzzer-workspace"), "{error}");
+}
+
+#[test]
+fn a_package_clean_resolves_registrations_of_that_package() {
+    let fixture = Project::with_broken_buzzer_workspace("clean-scope");
+    let config = fixture.project.join("polyfw.toml");
+    let source = fs::read_to_string(&config).unwrap();
+    let source = format!(
+        "{source}\n[firmwares.led-alias]\nplatform = \"demo-board\"\npackage = \"led-demo\"\n"
+    );
+    fs::write(&config, &source).unwrap();
+    succeed(fixture.command(&["build", "led-demo"]).output().unwrap());
+
+    let output = succeed(fixture.command(&["clean", "led-demo"]).output().unwrap());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("firmwares: led-alias, led-demo"),
+        "{stdout}"
+    );
+    assert_broken_buzzer_workspace(
+        &fixture
+            .command(&["clean", "--all-firmwares"])
+            .output()
+            .unwrap(),
+    );
+
+    fs::write(
+        &config,
+        source.replace("package = \"buzzer-demo\"", "package = \"led-demo\""),
+    )
+    .unwrap();
+    assert_broken_buzzer_workspace(&fixture.command(&["clean", "led-demo"]).output().unwrap());
+}
+
+fn assert_broken_buzzer_workspace(output: &Output) {
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "{error}");
+    assert!(error.contains("cargo metadata failed"), "{error}");
+    assert!(error.contains("buzzer-workspace"), "{error}");
 }
 
 #[test]

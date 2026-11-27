@@ -304,11 +304,8 @@ A future tag's URL is unavailable until the tag is pushed. While developing chan
 unchanged version, its existing tag still serves the released schema; use the generated local
 file to match the development executable.
 
-The schema checks configuration structure; polyfw additionally validates Cargo workspace
-membership and targets at runtime.
-Most project commands resolve every registered firmware before acting, so a broken registration can
-prevent a command for another firmware from starting. Consistency checking only applies to the
-selected target-side build/check operations.
+The schema checks configuration structure. polyfw also validates Cargo workspace membership and
+targets for the registrations in the [command's Cargo scope](usage.md#cargo-workspace-resolution).
 
 The consuming project's root `.gitignore` should cover Cargo's default build output and the
 generated VS Code launch configuration.

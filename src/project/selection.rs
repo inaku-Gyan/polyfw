@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::cargo::model::Selection;
 use crate::cargo::runner::firmware_elf_path;
 use crate::{Error, ErrorKind, InternalResult, Profile, Result, files};
 
@@ -65,6 +66,12 @@ pub enum FirmwareChoice<'a> {
     /// Save before executing. With no ID, call the picker even when a selection exists.
     /// Save only the supplied profile, clearing any previously saved profile if omitted.
     Save(Option<&'a str>),
+}
+
+pub(super) struct ChosenFirmware {
+    pub(super) id: String,
+    pub(super) profile: Option<Profile>,
+    pub(super) save: bool,
 }
 
 /// A single firmware or every registered firmware.
@@ -154,12 +161,12 @@ impl Context {
             .ok_or_else(|| Error::new(ErrorKind::SelectionCancelled, "selection cancelled"))
     }
 
-    pub(crate) fn choose_firmware(
+    pub(super) fn choose_firmware(
         &self,
         choice: FirmwareChoice<'_>,
         profile: Option<&Profile>,
-        options: &mut super::Options<'_>,
-    ) -> Result<(String, Option<Profile>)> {
+        picker: Option<&mut super::Picker<'_>>,
+    ) -> Result<ChosenFirmware> {
         let (id, profile) = match choice {
             FirmwareChoice::Explicit(firmware) => (firmware.to_owned(), profile.cloned()),
             FirmwareChoice::WithSaved(firmware) => {
@@ -167,7 +174,7 @@ impl Context {
                 let id = match (firmware, saved.as_ref()) {
                     (Some(id), _) => id.to_owned(),
                     (None, Some(saved)) => saved.firmware.clone(),
-                    (None, None) => self.pick_firmware(None, options.picker.as_deref_mut())?,
+                    (None, None) => self.pick_firmware(None, picker)?,
                 };
                 (
                     id,
@@ -181,18 +188,44 @@ impl Context {
                     Some(id) => id.to_owned(),
                     None => {
                         let saved = self.read_selection()?;
-                        self.pick_firmware(saved.as_ref(), options.picker.as_deref_mut())?
+                        self.pick_firmware(saved.as_ref(), picker)?
                     }
                 };
-                let saved = self.save_selection(&id, profile)?;
-                if let Some(observer) = options.selection_saved.as_deref_mut() {
-                    observer(&saved);
-                }
-                (saved.firmware, saved.profile)
+                (id, profile.cloned())
             }
         };
         self.require_firmware(&id)?;
-        Ok((id, profile))
+        Ok(ChosenFirmware {
+            id,
+            profile,
+            save: matches!(choice, FirmwareChoice::Save(_)),
+        })
+    }
+
+    pub(super) fn select_firmware(
+        &self,
+        chosen: ChosenFirmware,
+        options: &mut super::Options<'_>,
+    ) -> Result<Selection> {
+        let mut selection = self.selection(&chosen.id)?;
+        selection.profile = chosen.profile;
+        if chosen.save {
+            self.save_with_observer(&chosen.id, selection.profile.as_ref(), options)?;
+        }
+        Ok(selection)
+    }
+
+    pub(super) fn save_with_observer(
+        &self,
+        id: &str,
+        profile: Option<&Profile>,
+        options: &mut super::Options<'_>,
+    ) -> Result<SavedSelection> {
+        let saved = self.save_selection(id, profile)?;
+        if let Some(observer) = options.selection_saved.as_deref_mut() {
+            observer(&saved);
+        }
+        Ok(saved)
     }
 
     pub(crate) fn read_selection(&self) -> Result<Option<SavedSelection>> {

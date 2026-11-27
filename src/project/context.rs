@@ -56,7 +56,7 @@ pub(super) fn exact_root(path: &Path) -> Result<PathBuf> {
     Ok(root)
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub(crate) struct Context {
     pub(crate) root: PathBuf,
     pub(crate) registry: Registry,
@@ -79,15 +79,20 @@ impl Context {
     }
 
     pub(crate) fn resolved(&self) -> Result<Self> {
-        let mut context = self.clone();
-        context.resolve_cargo()?;
-        Ok(context)
+        self.resolved_matching(|_, _| true)
     }
 
-    pub(crate) fn resolve_cargo(&mut self) -> Result<()> {
-        self.cargo = cargo::context::resolve(&self.root, &self.registry)
+    pub(super) fn resolved_matching(
+        &self,
+        include: impl Fn(&str, &Firmware) -> bool,
+    ) -> Result<Self> {
+        let cargo = cargo::context::resolve(&self.root, &self.registry, include)
             .map_err(|error| Error::new(ErrorKind::Cargo, error))?;
-        Ok(())
+        Ok(Self {
+            root: self.root.clone(),
+            registry: self.registry.clone(),
+            cargo,
+        })
     }
 
     pub(crate) fn firmware(&self, id: &str) -> Option<FirmwareSummary<'_>> {
@@ -475,7 +480,7 @@ mod tests {
              package = \"test-firmware\"\n",
         )
         .unwrap();
-        cargo::context::resolve(&root, &registry).unwrap();
+        cargo::context::resolve(&root, &registry, |_, _| true).unwrap();
 
         fs::rename(workspace.join("firmware"), workspace.join("relocated")).unwrap();
         fs::write(
@@ -483,7 +488,7 @@ mod tests {
             "[workspace]\nmembers = [\"relocated\"]\nresolver = \"3\"\n",
         )
         .unwrap();
-        cargo::context::resolve(&root, &registry).unwrap();
+        cargo::context::resolve(&root, &registry, |_, _| true).unwrap();
 
         let other = root.join("platform/other");
         fs::create_dir_all(&other).unwrap();
@@ -502,7 +507,7 @@ mod tests {
             .get_mut("test-firmware")
             .unwrap()
             .platform = "other".into();
-        let error = cargo::context::resolve(&root, &registry)
+        let error = cargo::context::resolve(&root, &registry, |_, _| true)
             .unwrap_err()
             .to_string();
         assert!(

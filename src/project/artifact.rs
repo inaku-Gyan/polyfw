@@ -9,7 +9,7 @@ impl Context {
     pub(super) fn validate_artifact(&self, selection: &Selection, path: &Path) -> Result<()> {
         let resolved_path = path_for_comparison(path);
         let mut conflicts = Vec::new();
-        for id in self.cargo.keys() {
+        for id in self.registry.firmwares.keys() {
             if id == &selection.id {
                 continue;
             }

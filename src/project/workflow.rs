@@ -1,7 +1,7 @@
 use crate::cargo::{model::Selection, workflow as cargo_workflow};
 use crate::{Check, Profile, Result, RunReport, process};
 
-use super::{Artifact, BuildReport, Context, FirmwareTarget, Options, Project};
+use super::{Artifact, BuildReport, CargoScope, Context, FirmwareTarget, Options, Project};
 
 impl Project {
     /// Builds the requested firmware and reports the executables confirmed by Cargo.
@@ -11,8 +11,8 @@ impl Project {
         profile: Option<&Profile>,
         mut options: Options<'_>,
     ) -> Result<BuildReport> {
-        let context = self.context.resolved()?;
-        let selections = context.targets(target, profile, &mut options)?;
+        let (_, selections) =
+            self.select_targets(target, profile, CargoScope::Firmware, &mut options)?;
         let (execution, executables) =
             cargo_workflow::build(&selections, options.output, options.progress)?;
         let artifacts = selections
@@ -28,8 +28,8 @@ impl Project {
 
     /// Cleans an individual firmware package or all registered output directory contexts.
     pub fn clean(&self, target: FirmwareTarget<'_>, mut options: Options<'_>) -> Result<RunReport> {
-        let context = self.context.resolved()?;
-        let selections = context.targets(target, None, &mut options)?;
+        let (context, selections) =
+            self.select_targets(target, None, CargoScope::Package, &mut options)?;
         let stages = cargo_workflow::clean(
             &context.registry,
             &context.cargo,
@@ -46,43 +46,49 @@ impl Project {
         target: FirmwareTarget<'_>,
         mut options: Options<'_>,
     ) -> Result<RunReport> {
-        let context = self.context.resolved()?;
-        let selections = context.targets(target, None, &mut options)?;
+        let (_, selections) =
+            self.select_targets(target, None, CargoScope::Firmware, &mut options)?;
         let stages = cargo_workflow::check(
-            &context.root,
-            &context.registry.config.local_dependencies,
+            &self.context.root,
+            &self.context.registry.config.local_dependencies,
             &selections,
             check,
         )?;
         process::run(stages, options.output, options.progress, None)
     }
-}
-
-impl Context {
-    fn targets(
+    fn select_targets(
         &self,
         target: FirmwareTarget<'_>,
         profile: Option<&Profile>,
+        scope: CargoScope,
         options: &mut Options<'_>,
-    ) -> Result<Vec<Selection>> {
+    ) -> Result<(Context, Vec<Selection>)> {
         match target {
             FirmwareTarget::One(choice) => {
-                let (id, profile) = self.choose_firmware(choice, profile, options)?;
-                let mut selection = self.selection(&id)?;
-                selection.profile = profile;
-                Ok(vec![selection])
+                let (context, selection) =
+                    self.select_with_cargo(choice, profile, scope, options)?;
+                Ok((context, vec![selection]))
             }
-            FirmwareTarget::All => self
-                .registry
-                .firmwares
-                .keys()
-                .map(|id| {
-                    let mut selection = self.selection(id)?;
-                    selection.profile = profile.cloned();
-                    Ok(selection)
-                })
-                .collect(),
+            FirmwareTarget::All => {
+                let context = self.context.resolved()?;
+                let selections = context.all_selections(profile)?;
+                Ok((context, selections))
+            }
         }
+    }
+}
+
+impl Context {
+    fn all_selections(&self, profile: Option<&Profile>) -> Result<Vec<Selection>> {
+        self.registry
+            .firmwares
+            .keys()
+            .map(|id| {
+                let mut selection = self.selection(id)?;
+                selection.profile = profile.cloned();
+                Ok(selection)
+            })
+            .collect()
     }
 }
 
@@ -118,6 +124,24 @@ mod tests {
 
     fn build(selections: &[Selection]) {
         cargo_workflow::build(selections, OutputMode::Inherit, None).unwrap();
+    }
+
+    fn targets(
+        context: &Context,
+        target: FirmwareTarget<'_>,
+        profile: Option<&Profile>,
+    ) -> Vec<Selection> {
+        match target {
+            FirmwareTarget::One(choice) => {
+                let chosen = context.choose_firmware(choice, profile, None).unwrap();
+                vec![
+                    context
+                        .select_firmware(chosen, &mut Options::default())
+                        .unwrap(),
+                ]
+            }
+            FirmwareTarget::All => context.all_selections(profile).unwrap(),
+        }
     }
 
     #[test]
@@ -336,9 +360,7 @@ mod tests {
             fs::write(context.root.join(".vscode"), "not a directory").unwrap();
             let root = context.root.clone();
             let target = FirmwareTarget::One(FirmwareChoice::Save(Some("test-firmware")));
-            let selections = context
-                .targets(target, None, &mut Options::default())
-                .unwrap();
+            let selections = targets(&context, target, None);
             // The operation fails after saving on this fixture.
             let plan = match command {
                 "clean" => Ok(cargo_workflow::clean(
@@ -474,9 +496,7 @@ mod tests {
                 .save_selection("test-firmware", Some(&"release".parse().unwrap()))
                 .unwrap();
             let profile = profile.map(|name| name.parse().unwrap());
-            let selections = context
-                .targets(target, profile.as_ref(), &mut Options::default())
-                .unwrap();
+            let selections = targets(&context, target, profile.as_ref());
             assert!(!selections.is_empty());
             for selection in selections {
                 assert_eq!(selection.profile.as_ref().map(Profile::name), expected);
@@ -552,7 +572,7 @@ mod tests {
         )
         .unwrap();
         fs::write(workspace.join("firmware/src/main.rs"), "fn main() {}\n").unwrap();
-        context.resolve_cargo().unwrap();
+        let context = context.resolved().unwrap();
         let mut selection = context.selection("test-firmware").unwrap();
         selection.profile = Some("bench-debug".parse().unwrap());
         build(std::slice::from_ref(&selection));
@@ -612,9 +632,7 @@ mod tests {
         let context = test_context(root.clone());
 
         let choice = FirmwareChoice::Save(Some("test-firmware"));
-        let selections = context
-            .targets(FirmwareTarget::One(choice), None, &mut Options::default())
-            .unwrap();
+        let selections = targets(&context, FirmwareTarget::One(choice), None);
 
         assert_eq!(selections[0].id, "test-firmware");
         let saved = context.read_selection().unwrap().unwrap();
@@ -629,9 +647,7 @@ mod tests {
         let context = test_context(root.clone());
 
         let choice = FirmwareChoice::Explicit("test-firmware");
-        let selections = context
-            .targets(FirmwareTarget::One(choice), None, &mut Options::default())
-            .unwrap();
+        let selections = targets(&context, FirmwareTarget::One(choice), None);
 
         assert_eq!(selections[0].id, "test-firmware");
         assert!(!context.selection_path().exists());

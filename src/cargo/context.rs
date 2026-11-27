@@ -2,15 +2,26 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use crate::InternalResult as Result;
-use crate::config::{REGISTRY_FILE, model::Registry};
+use crate::config::{
+    REGISTRY_FILE,
+    model::{Firmware, Registry},
+};
 
 use super::model::{CargoContext, FirmwareCargo, Metadata, ResolvedBin, Selection};
 use super::runner;
 
-pub(crate) fn resolve(root: &Path, registry: &Registry) -> Result<BTreeMap<String, FirmwareCargo>> {
+pub(crate) fn resolve(
+    root: &Path,
+    registry: &Registry,
+    include: impl Fn(&str, &Firmware) -> bool,
+) -> Result<BTreeMap<String, FirmwareCargo>> {
     let mut resolved = BTreeMap::new();
     let mut metadata = BTreeMap::new();
-    for (id, firmware) in &registry.firmwares {
+    let firmwares = registry
+        .firmwares
+        .iter()
+        .filter(|(id, firmware)| include(id, firmware));
+    for (id, firmware) in firmwares {
         let platform = &registry.platforms[&firmware.platform];
         let working_dir = canonical(
             &root.join(

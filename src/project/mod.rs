@@ -103,6 +103,12 @@ pub struct Project {
     context: Context,
 }
 
+enum CargoScope {
+    Firmware,
+    Package,
+    Registry,
+}
+
 impl Project {
     /// Opens the registry in an exact directory.
     pub fn open(root: impl AsRef<Path>) -> Result<Self> {
@@ -144,18 +150,29 @@ impl Project {
             .map(move |id| (id.as_str(), PlatformInfo::load(registry, id)))
     }
 
-    /// Resolves Cargo information and reports the saved selection, including stale firmware IDs.
+    /// Resolves an overview or one firmware's details.
+    ///
+    /// The report includes any saved selection, including stale firmware IDs.
     pub fn info(&self, query: InfoQuery<'_>, mut options: Options<'_>) -> Result<ProjectInfo> {
-        let context = self.context.resolved()?;
         let picked;
         let firmware = match query {
             InfoQuery::Overview => None,
             InfoQuery::Firmware(id) => Some(id),
             InfoQuery::Pick => {
-                let saved = context.read_saved_selection()?;
-                picked = context.pick_firmware(saved.as_ref(), options.picker.as_deref_mut())?;
+                let saved = self.context.read_saved_selection()?;
+                picked = self
+                    .context
+                    .pick_firmware(saved.as_ref(), options.picker.as_deref_mut())?;
                 Some(picked.as_str())
             }
+        };
+        let context = match firmware {
+            Some(id) => {
+                self.context.require_firmware(id)?;
+                self.context
+                    .resolved_matching(|candidate, _| candidate == id)?
+            }
+            None => self.context.resolved()?,
         };
         ProjectInfo::load(&context, firmware)
     }
@@ -166,27 +183,26 @@ impl Project {
         choice: FirmwareChoice<'_>,
         mut options: Options<'_>,
     ) -> Result<FirmwareSummary<'_>> {
-        let resolved;
-        let context = if matches!(choice, FirmwareChoice::Save(_))
-            && self.context.registry.config.vscode.enabled
-        {
-            resolved = self.context.resolved()?;
-            &resolved
-        } else {
-            &self.context
-        };
-        let (id, _) = context.choose_firmware(choice, None, &mut options)?;
-        self.context.require_firmware(&id)
+        let chosen = self
+            .context
+            .choose_firmware(choice, None, options.picker.as_deref_mut())?;
+        if chosen.save {
+            self.save_firmware(&chosen.id, chosen.profile.as_ref(), &mut options)?;
+        }
+        self.context.require_firmware(&chosen.id)
     }
 
     /// Resolves an expected ELF path and checks whether a file is present there.
+    ///
+    /// Saving with editor generation enabled also checks other registrations for path conflicts.
     pub fn artifact(
         &self,
         choice: FirmwareChoice<'_>,
         profile: Option<&Profile>,
-        options: Options<'_>,
+        mut options: Options<'_>,
     ) -> Result<Artifact> {
-        let (_, selection) = self.select_artifact(choice, profile, options)?;
+        let (_, selection) =
+            self.select_with_cargo(choice, profile, CargoScope::Firmware, &mut options)?;
         Ok(Artifact::from_selection(&selection, None))
     }
 
@@ -197,24 +213,40 @@ impl Project {
         &self,
         choice: FirmwareChoice<'_>,
         profile: Option<&Profile>,
-        options: Options<'_>,
+        mut options: Options<'_>,
     ) -> Result<Artifact> {
-        let (context, selection) = self.select_artifact(choice, profile, options)?;
+        let (context, selection) =
+            self.select_with_cargo(choice, profile, CargoScope::Registry, &mut options)?;
         let artifact = Artifact::from_selection(&selection, None);
         context.validate_artifact(&selection, &artifact.path)?;
         Ok(artifact)
     }
 
-    fn select_artifact(
+    fn select_with_cargo(
         &self,
         choice: FirmwareChoice<'_>,
         profile: Option<&Profile>,
-        mut options: Options<'_>,
+        scope: CargoScope,
+        options: &mut Options<'_>,
     ) -> Result<(Context, Selection)> {
-        let context = self.context.resolved()?;
-        let (id, profile) = context.choose_firmware(choice, profile, &mut options)?;
-        let mut selection = context.selection(&id)?;
-        selection.profile = profile;
+        let chosen =
+            self.context
+                .choose_firmware(choice, profile, options.picker.as_deref_mut())?;
+        let scope = if chosen.save && self.context.registry.config.vscode.enabled {
+            CargoScope::Registry
+        } else {
+            scope
+        };
+        let context = match scope {
+            CargoScope::Firmware => self.context.resolved_matching(|id, _| id == chosen.id)?,
+            CargoScope::Package => {
+                let package = &self.context.registry.firmwares[&chosen.id].package;
+                self.context
+                    .resolved_matching(|_, firmware| firmware.package == *package)?
+            }
+            CargoScope::Registry => self.context.resolved()?,
+        };
+        let selection = context.select_firmware(chosen, options)?;
         Ok((context, selection))
     }
 
@@ -232,16 +264,27 @@ impl Project {
         profile: Option<&Profile>,
         mut options: Options<'_>,
     ) -> Result<SavedSelection> {
-        let resolved;
-        let context = if self.context.registry.config.vscode.enabled {
-            resolved = self.context.resolved()?;
-            &resolved
+        let chosen = self.context.choose_firmware(
+            FirmwareChoice::Save(firmware),
+            profile,
+            options.picker.as_deref_mut(),
+        )?;
+        self.save_firmware(&chosen.id, chosen.profile.as_ref(), &mut options)
+    }
+
+    fn save_firmware(
+        &self,
+        id: &str,
+        profile: Option<&Profile>,
+        options: &mut Options<'_>,
+    ) -> Result<SavedSelection> {
+        if self.context.registry.config.vscode.enabled {
+            self.context
+                .resolved()?
+                .save_with_observer(id, profile, options)
         } else {
-            &self.context
-        };
-        let (firmware, profile) =
-            context.choose_firmware(FirmwareChoice::Save(firmware), profile, &mut options)?;
-        Ok(SavedSelection { firmware, profile })
+            self.context.save_with_observer(id, profile, options)
+        }
     }
 
     /// Clears managed selection files without resolving Cargo or reading old state.
