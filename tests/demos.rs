@@ -181,8 +181,13 @@ fn assert_arm_artifact(report: &serde_json::Value, id: &str, profile: &str) {
     assert_eq!(&elf[18..20], &[40, 0], "ELF must target ARM");
     let entry = u32::from_le_bytes(elf[24..28].try_into().unwrap());
     assert_eq!(entry & 1, 1, "Cortex-M entry point must use Thumb mode");
+    let flash_end = if firmware["chip"] == "STM32F401RETx" {
+        0x0808_0000
+    } else {
+        0x0806_0000
+    };
     assert!(
-        (0x0800_0000..0x0806_0000).contains(&entry),
+        (0x0800_0000..flash_end).contains(&entry),
         "entry point {entry:#x} must lie in the configured flash region"
     );
 }
@@ -205,37 +210,47 @@ fn minimal_example_discovers_selects_and_builds_the_reported_artifact() {
     assert_eq!(report["format_version"], 2);
     assert!(report.get("repository_root").is_none());
     assert!(report.get("saved_selection").is_none());
-    let firmware = &report["firmwares"]["hello"];
-    assert_eq!(firmware["package"], "hello");
+    let firmware = &report["firmwares"]["blinky"];
+    assert_eq!(firmware["package"], "blinky");
+    assert_eq!(firmware["bin"], "blinky");
     assert!(firmware.get("check_platform").is_none());
     assert!(firmware.get("cpu").is_none());
-    assert!(report["platforms"]["dm-mc02"].get("cpu").is_none());
+    assert!(report["platforms"]["nucleo-f401re"].get("cpu").is_none());
     for artifact in firmware["artifacts"].as_object().unwrap().values() {
         assert_eq!(artifact["exists"], false);
     }
 
-    example.run(&["select", "hello", "--release"]);
+    example.run(&["select", "blinky", "--release"]);
     example.run(&["build"]);
     let report = example.json(&["info", "--json"]);
-    assert_eq!(report["saved_selection"]["firmware"], "hello");
+    assert_eq!(report["saved_selection"]["firmware"], "blinky");
     assert_eq!(report["saved_selection"]["profile"], "release");
-    assert_arm_artifact(&report, "hello", "release");
-    assert_eq!(report["platforms"]["dm-mc02"]["chip"], "STM32H723VGTx");
+    assert_arm_artifact(&report, "blinky", "release");
+    assert_eq!(
+        report["platforms"]["nucleo-f401re"]["chip"],
+        "STM32F401RETx"
+    );
     assert!(!example.root.join(".vscode/launch.json").exists());
-    example.run(&["verify", "--all-firmwares"]);
     example.run(&["select", "--clear"]);
     assert!(!example.root.join(".polyfw-state/selected").exists());
 }
 
 #[test]
+fn minimal_example_verifies_the_hardware_only_binary() {
+    let example = Example::new("minimal");
+    let output = example.run(&["verify", "--all-firmwares"]);
+    assert_verify_stages(&output, &["fmt", "mcu clippy", "test"]);
+}
+
+#[test]
 fn minimal_example_verify_stops_after_a_formatting_failure_without_rewriting_sources() {
     let example = Example::new("minimal");
-    example.append_source("src/lib.rs", "\npub fn format_sentinel( ){ }\n");
-    let path = example.root.join("src/lib.rs");
+    example.append_source("src/main.rs", "\npub fn format_sentinel( ){ }\n");
+    let path = example.root.join("src/main.rs");
     let source = fs::read(&path).unwrap();
 
     let output = failed(
-        example.command(&["verify", "hello"]).output().unwrap(),
+        example.command(&["verify", "blinky"]).output().unwrap(),
         "Diff in",
     );
     assert_verify_stages(&output, &["fmt"]);
@@ -246,39 +261,39 @@ fn minimal_example_verify_stops_after_a_formatting_failure_without_rewriting_sou
 fn minimal_example_verify_stops_after_an_mcu_lint_failure() {
     let example = Example::new("minimal");
     example.append_source(
-        "src/lib.rs",
+        "src/main.rs",
         "\n#[cfg(target_os = \"none\")]\npub fn mcu_lint_sentinel(values: &[u8]) -> bool {\n    values.len() == 0\n}\n",
     );
 
     let output = failed(
-        example.command(&["verify", "hello"]).output().unwrap(),
+        example.command(&["verify", "blinky"]).output().unwrap(),
         "clippy::len_zero",
     );
     assert_verify_stages(&output, &["fmt", "mcu clippy"]);
 }
 
 #[test]
-fn minimal_example_verify_stops_after_a_host_lint_failure() {
-    let example = Example::new("minimal");
+fn verify_stops_after_a_host_lint_failure() {
+    let example = Example::new("multi-firmware");
     example.append_source(
-        "src/lib.rs",
+        "firmwares/led-demo/src/lib.rs",
         "\n#[cfg(test)]\nmod tests {\n    #[test]\n    fn host_lint_sentinel() {\n        let values: &[u8] = &[];\n        assert!(values.len() == 0);\n    }\n}\n",
     );
 
     let output = failed(
-        example.command(&["verify", "hello"]).output().unwrap(),
+        example.command(&["verify", "led-demo"]).output().unwrap(),
         "clippy::len_zero",
     );
     assert_verify_stages(&output, &["fmt", "mcu clippy", "host clippy"]);
 }
 
 #[test]
-fn minimal_example_verify_reports_a_host_test_failure_after_formatting_and_linting() {
-    let example = Example::new("minimal");
-    example.add_failing_test("src/lib.rs", "verify host test sentinel");
+fn verify_reports_a_host_test_failure_after_formatting_and_linting() {
+    let example = Example::new("multi-firmware");
+    example.add_failing_test("firmwares/led-demo/src/lib.rs", "verify host test sentinel");
 
     let output = failed_test(
-        example.command(&["verify", "hello"]).output().unwrap(),
+        example.command(&["verify", "led-demo"]).output().unwrap(),
         "verify host test sentinel",
     );
     assert_verify_stages(&output, &["fmt", "mcu clippy", "host clippy", "test"]);

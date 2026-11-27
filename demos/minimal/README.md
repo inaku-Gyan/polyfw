@@ -1,22 +1,29 @@
-# Minimal example
+# NUCLEO-F401RE blinky
 
-A single Cargo package containing a library and one firmware binary.
+The `blinky` firmware toggles the board's green user LED (LD2 on PA5) every 500 ms using
+SysTick. [ST Nucleo-64 user manual](https://www.st.com/resource/en/user_manual/dm00105823.pdf)
 
-## Layout
+The Cargo package contains one `no_std` binary. The `nucleo-f401re` platform uses probe-rs chip
+`STM32F401RETx`, with 512 KiB of flash and 96 KiB of SRAM in the linker script.
+[Firmware source](src/main.rs) · [Project configuration](polyfw.toml) · [Linker memory map](memory.x)
 
-```text
-minimal/
-├── Cargo.toml
-├── polyfw.toml
-├── .cargo/config.toml
-├── memory.x
-├── build.rs
-└── src/
-    ├── lib.rs
-    └── main.rs
+## Build and flash
+
+Use the development CLI from this checkout for binary-only firmware support. Run these commands
+from the repository root.
+
+```sh
+just run --project-root demos/minimal info
+just run --project-root demos/minimal verify blinky
+just run --project-root demos/minimal build blinky --release
 ```
 
-## Platform and firmware
+The binary sets `test = false` because it uses the board's peripherals. `verify` checks formatting
+and runs Clippy for the MCU.
 
-[polyfw.toml](polyfw.toml) defines the `dm-mc02` platform for DM-MC02
-(`cortex-m7`, `STM32H723VGTx`). The sole firmware, `hello`, uses the `hello` package and binary.
+Install probe-rs and connect the board's ST-LINK USB port to flash the release build.
+[Flash and monitor](../../docs/usage.md#flash-and-monitor)
+
+```sh
+just run --project-root demos/minimal flash blinky --release
+```

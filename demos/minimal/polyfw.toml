@@ -6,10 +6,10 @@ min-polyfw-version = "0.3.0"
 [config.vscode]
 enabled = false
 
-[platforms.dm-mc02]
+[platforms.nucleo-f401re]
 target = "thumbv7em-none-eabihf"
-chip = "STM32H723VGTx"
+chip = "STM32F401RETx"
 
-[firmwares.hello]
-platform = "dm-mc02"
-package = "hello"
+[firmwares.blinky]
+platform = "nucleo-f401re"
+package = "blinky"

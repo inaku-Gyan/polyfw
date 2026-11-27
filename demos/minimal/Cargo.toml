@@ -1,14 +1,16 @@
 [package]
-name = "hello"
+name = "blinky"
 version = "0.1.0"
 edition = "2024"
 publish = false
 
 [target.'cfg(target_os = "none")'.dependencies]
+cortex-m = "0.7.10"
 cortex-m-rt = "0.7.7"
+stm32-metapac = { version = "21.0.0", features = ["rt", "stm32f401re"] }
 
 [[bin]]
-name = "hello"
+name = "blinky"
 path = "src/main.rs"
 test = false
 bench = false

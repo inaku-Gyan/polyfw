@@ -174,7 +174,7 @@ Use `just test-demos minimal --nocapture` to run the minimal project's tests wit
 The recipe forwards test-name filters and harness options after Cargo's `--` separator.
 
 `tests/demos.rs` copies the checked-in projects into temporary directories and invokes the
-built `plfw` executable. It exercises real MCU builds, host library tests, selection, external
+built `plfw` executable. It exercises real MCU builds, host tests, selection, external
 workspace members and dependency scopes. The tests check reported artifact paths, platform
 targets and chips, and linked 32-bit ARM ELF executables with Thumb entry points in flash, including
 independent builds of a package's two binaries. Failing host tests introduced in the copies check
