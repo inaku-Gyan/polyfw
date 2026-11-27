@@ -61,11 +61,12 @@ pub(crate) fn resolve(root: &Path, registry: &Registry) -> Result<BTreeMap<Strin
                 firmware.package
             )
         })?;
-        if !package
-            .targets
-            .iter()
-            .any(|target| target.kind.iter().any(|kind| kind == "lib"))
-        {
+        if !package.targets.iter().any(|target| {
+            target
+                .kind
+                .iter()
+                .any(|kind| matches!(kind.as_str(), "lib" | "rlib"))
+        }) {
             return Err(format!(
                 "firmware {id} package {} has no library target",
                 firmware.package

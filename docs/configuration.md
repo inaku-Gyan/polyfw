@@ -14,7 +14,8 @@ polyfw expects working firmware sources, runtime setup and linker scripts. Keep 
 the consuming project. Each firmware package must:
 
 - Be a member of the Cargo workspace discovered from its effective working directory.
-- Declare a library that can be checked on both the MCU and the development host.
+- Declare a library that can be checked on both the MCU and the development host. Use the
+  default library crate type or an explicit `rlib`.
 - Declare at least one binary. A package with multiple binaries needs an explicit `bin`
   in its firmware registration.
 

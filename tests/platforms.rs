@@ -862,6 +862,50 @@ fn removed_compiler_fields_are_rejected_in_configuration() {
 }
 
 #[test]
+fn a_firmware_with_an_explicit_rlib_can_build() {
+    let fixture = Project::new("rlib-firmware");
+    let package = fixture.workspace.join("led-demo");
+    let manifest = package.join("Cargo.toml");
+    let source = fs::read_to_string(&manifest).unwrap();
+    fs::write(
+        &manifest,
+        format!("{source}\n[lib]\ncrate-type = [\"rlib\"]\n"),
+    )
+    .unwrap();
+    fs::write(
+        package.join("src/main.rs"),
+        "fn main() { assert!(led_demo::value()); }\n",
+    )
+    .unwrap();
+
+    succeed(fixture.command(&["build", "led-demo"]).output().unwrap());
+}
+
+#[test]
+fn an_rlib_example_does_not_count_as_a_firmware_library() {
+    let fixture = Project::new("rlib-example");
+    let package = fixture.workspace.join("led-demo");
+    fs::rename(package.join("src/lib.rs"), package.join("src/example.rs")).unwrap();
+    let manifest = package.join("Cargo.toml");
+    let source = fs::read_to_string(&manifest).unwrap();
+    fs::write(
+        &manifest,
+        format!(
+            "{source}\n[[example]]\nname = \"helper\"\npath = \"src/example.rs\"\ncrate-type = [\"rlib\"]\n"
+        ),
+    )
+    .unwrap();
+
+    let output = fixture.command(&["build", "led-demo"]).output().unwrap();
+    assert!(!output.status.success());
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        error.contains("package led-demo has no library target"),
+        "{error}"
+    );
+}
+
+#[test]
 fn shared_intermediates_keep_same_named_final_images_independent() {
     let fixture = Project::new("split-outputs");
     fixture.split_workspaces();
