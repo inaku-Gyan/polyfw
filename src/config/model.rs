@@ -126,8 +126,8 @@ pub(crate) struct Firmware {
     pub(crate) description: Option<String>,
     /// Platform ID declared in this registry's platforms table.
     pub(crate) platform: String,
-    /// Cargo package name in the workspace discovered from the effective working directory. It must declare a host-testable library
-    /// and at least one firmware binary.
+    /// Cargo package name in the workspace discovered from the effective working directory.
+    /// It must declare at least one firmware binary.
     pub(crate) package: String,
     /// Firmware binary target name. Omit only if the package declares exactly one binary,
     /// counting feature-gated binaries independently of Cargo's default-run setting.

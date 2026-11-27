@@ -14,10 +14,11 @@ polyfw expects working firmware sources, runtime setup and linker scripts. Keep 
 the consuming project. Each firmware package must:
 
 - Be a member of the Cargo workspace discovered from its effective working directory.
-- Declare a library that can be checked on both the MCU and the development host. Use the
-  default library crate type or an explicit `rlib`.
 - Declare at least one binary. A package with multiple binaries needs an explicit `bin`
   in its firmware registration.
+
+The library target is optional. Put host-testable code in a library or in a binary that
+supports compilation for the host.
 
 A workspace containing both firmware packages can have this layout:
 
@@ -86,10 +87,10 @@ test = false
 bench = false
 ```
 
-Keep host-testable logic in each package's library. For a hardware-only binary, `test = false` keeps
-Cargo's default host test run from creating a binary test harness. The host Clippy stage
-still checks enabled test targets; use conditional compilation where host and MCU code differ.
-Run Cargo directly to confirm each package's host tests work before registering it.
+For a hardware-only binary, `test = false` disables its unit-test target. Host Clippy checks
+libraries and enabled test targets. Cargo also builds a package's binaries when running its
+integration tests. Use conditional compilation where host and MCU code differ, and run
+`cargo test --target host-tuple --locked` to confirm the host build.
 
 From the consuming workspace, install its required components and target:
 

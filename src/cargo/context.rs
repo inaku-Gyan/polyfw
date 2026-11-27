@@ -72,18 +72,6 @@ pub(crate) fn resolve(
                 firmware.package
             )
         })?;
-        if !package.targets.iter().any(|target| {
-            target
-                .kind
-                .iter()
-                .any(|kind| matches!(kind.as_str(), "lib" | "rlib"))
-        }) {
-            return Err(format!(
-                "firmware {id} package {} has no library target",
-                firmware.package
-            )
-            .into());
-        }
         let bins = package
             .targets
             .iter()

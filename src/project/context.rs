@@ -220,8 +220,8 @@ mod tests {
     }
 
     #[test]
-    fn loading_the_registry_rejects_a_registered_firmware_without_a_library() {
-        let root = std::env::temp_dir().join(format!("polyfw-no-lib-{}", std::process::id()));
+    fn loading_the_registry_rejects_a_registered_firmware_without_a_binary() {
+        let root = std::env::temp_dir().join(format!("polyfw-no-bin-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         let workspace = root.join("platform/test");
         configure(&workspace);
@@ -231,7 +231,7 @@ mod tests {
             "[package]\nname = \"test-firmware\"\nversion = \"0.1.0\"\n[workspace]\n",
         )
         .unwrap();
-        fs::write(workspace.join("src/main.rs"), "fn main() {}\n").unwrap();
+        fs::write(workspace.join("src/lib.rs"), "").unwrap();
         fs::write(
             root.join(REGISTRY_FILE),
             "config-version = \"0.3.0\"\nmin-polyfw-version = \"0.3.0\"\n[platforms.test]\ntarget = \"thumbv7em-none-eabihf\"\ntarget-dir = \"target/firmware/test\"\nworking-dir = \"platform/test\"\n\
@@ -243,11 +243,11 @@ mod tests {
 
         let result = Context::load(root.clone());
         fs::remove_dir_all(root).unwrap();
-        let error = result.expect_err("a binary-only firmware must be rejected");
+        let error = result.expect_err("a library-only firmware must be rejected");
         assert!(
             error
                 .to_string()
-                .contains("test-firmware has no library target"),
+                .contains("test-firmware has no binary targets"),
             "{error}"
         );
     }

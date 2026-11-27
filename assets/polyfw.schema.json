@@ -118,7 +118,7 @@
           ]
         },
         "package": {
-          "description": "Cargo package name in the workspace discovered from the effective working directory. It must declare a host-testable library\nand at least one firmware binary.",
+          "description": "Cargo package name in the workspace discovered from the effective working directory.\nIt must declare at least one firmware binary.",
           "type": "string"
         },
         "platform": {

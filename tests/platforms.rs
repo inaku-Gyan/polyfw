@@ -894,10 +894,11 @@ fn a_firmware_with_an_explicit_rlib_can_build() {
 }
 
 #[test]
-fn an_rlib_example_does_not_count_as_a_firmware_library() {
+fn a_bin_only_firmware_can_lint_and_run_its_host_tests() {
     let fixture = Project::new("rlib-example");
     let package = fixture.workspace.join("led-demo");
-    fs::rename(package.join("src/lib.rs"), package.join("src/example.rs")).unwrap();
+    fs::remove_file(package.join("src/lib.rs")).unwrap();
+    fs::write(package.join("src/example.rs"), "#![forbid(unsafe_code)]\n").unwrap();
     let manifest = package.join("Cargo.toml");
     let source = fs::read_to_string(&manifest).unwrap();
     fs::write(
@@ -908,12 +909,36 @@ fn an_rlib_example_does_not_count_as_a_firmware_library() {
     )
     .unwrap();
 
-    let output = fixture.command(&["build", "led-demo"]).output().unwrap();
+    let binary = package.join("src/main.rs");
+    let source = "\
+fn main() {}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn binary_unit_test() {
+        let values: &[u8] = &[];
+        assert!(values.is_empty());
+    }
+}
+";
+    fs::write(
+        &binary,
+        source.replace("values.is_empty()", "values.len() == 0"),
+    )
+    .unwrap();
+
+    let output = fixture.command(&["lint", "led-demo"]).output().unwrap();
     assert!(!output.status.success());
     let error = String::from_utf8_lossy(&output.stderr);
+    assert!(error.contains("clippy::len_zero"), "{error}");
+
+    fs::write(binary, source).unwrap();
+    let output = succeed(fixture.command(&["verify", "led-demo"]).output().unwrap());
+    let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        error.contains("package led-demo has no library target"),
-        "{error}"
+        stdout.contains("test tests::binary_unit_test ... ok"),
+        "{stdout}"
     );
 }
 

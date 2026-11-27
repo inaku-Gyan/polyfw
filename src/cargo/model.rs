@@ -87,8 +87,20 @@ pub(crate) enum DependencyKind {
 pub(crate) struct MetadataTarget {
     pub(crate) name: String,
     pub(crate) kind: Vec<String>,
+    pub(crate) test: bool,
     #[serde(default, rename = "required-features")]
     pub(crate) required_features: Vec<String>,
+}
+
+impl MetadataTarget {
+    pub(crate) fn is_library(&self) -> bool {
+        self.kind.iter().any(|kind| {
+            matches!(
+                kind.as_str(),
+                "lib" | "rlib" | "dylib" | "cdylib" | "staticlib" | "proc-macro"
+            )
+        })
+    }
 }
 
 #[derive(Clone, Debug, Default)]

@@ -3,7 +3,9 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use super::context::{cargo_metadata_for, same_context, unique_contexts};
-use super::model::{CargoContext, DependencyKind, Metadata, MetadataPackage, Selection};
+use super::model::{
+    CargoContext, DependencyKind, Metadata, MetadataPackage, MetadataTarget, Selection,
+};
 use super::runner;
 use crate::InternalResult as Result;
 use crate::config::local_dependencies::LocalDependencies;
@@ -20,6 +22,8 @@ pub(crate) struct PackageScope {
     pub(crate) manifest_path: PathBuf,
     pub(crate) absolute_manifest_path: PathBuf,
     pub(crate) embedded: bool,
+    pub(crate) has_library: bool,
+    pub(crate) has_test_targets: bool,
     pub(crate) id: String,
     pub(crate) host_id: String,
     pub(crate) cargo: CargoContext,
@@ -276,6 +280,8 @@ impl Resolver {
                             manifest_path: project_relative(&self.root, &manifest),
                             absolute_manifest_path: manifest,
                             embedded: role == CompilationTarget::Embedded,
+                            has_library: package.targets.iter().any(MetadataTarget::is_library),
+                            has_test_targets: package.targets.iter().any(|target| target.test),
                             id: id.clone(),
                             host_id,
                             cargo: host_cargo,

@@ -71,7 +71,7 @@ loads the registrations needed by the [command](usage.md#cargo-workspace-resolut
 metadata for identical contexts during that pass. Checks and detailed info also load dependency
 graphs. Clearing selection only loads configuration and skips parsing old state.
 
-Cargo validation requires a library and at least one binary, counting feature-gated binaries
+Cargo validation requires at least one binary, counting feature-gated binaries
 independently of default-run. An omitted bin is resolved for artifact lookup and build verification
 while remaining absent from build arguments. Same-named binaries follow Cargo's native output
 behavior.
@@ -135,13 +135,14 @@ own workspace root and native directories, even if another firmware registers th
 | Stage | Cargo selection |
 | --- | --- |
 | Formatting | Package names, once per host execution context |
-| MCU Clippy | Runtime package IDs, --lib --bins, explicit Platform target |
-| Host Clippy | Host package IDs, --lib --tests --target host-tuple |
+| MCU Clippy | Runtime package IDs, default library and binary targets, explicit Platform target |
+| Host Clippy | Host package IDs, --tests --target host-tuple, plus --lib for groups that contain a library |
 | Host tests | Default package tests/doctests, --target host-tuple |
 
-Grouped commands retain Cargo defaults and feature unification. Different toolchain/cwd contexts
-can format/check the same source more than once. This review scope is not the exact graph of a
-single image. verify shares the scope, executes format-check, lint, then tests, and stops on failure.
+Host Clippy runs for groups with at least one library or enabled test target. Grouped commands
+retain Cargo feature unification. Different toolchain/cwd contexts can format/check the same source
+more than once. This review scope is not the exact graph of a single image. verify shares the scope,
+executes format-check, lint, then tests, and stops on failure.
 
 ## Artifact identity
 

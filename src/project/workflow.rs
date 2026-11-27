@@ -606,6 +606,8 @@ mod tests {
                     manifest_path: "common/Cargo.toml".into(),
                     absolute_manifest_path: context.root.join("common/Cargo.toml"),
                     embedded: true,
+                    has_library: true,
+                    has_test_targets: true,
                     id: "common-id".into(),
                     host_id: "common-owner-id".into(),
                     cargo,

@@ -258,9 +258,7 @@ pub(crate) fn lint_stages(scopes: &[WorkspaceScope]) -> Vec<Invocation> {
             |package| &package.id,
         );
         if !names.is_empty() {
-            command
-                .args(["--lib", "--bins"])
-                .args(["--locked", "--", "-D", "warnings"]);
+            command.args(["--locked", "--", "-D", "warnings"]);
             stages.push(Invocation::new(
                 StageKind::Lint,
                 Some(StageTarget::Embedded),
@@ -270,11 +268,22 @@ pub(crate) fn lint_stages(scopes: &[WorkspaceScope]) -> Vec<Invocation> {
         }
     }
     for scope in scope::host_scopes(scopes) {
+        let has_library = scope.packages.iter().any(|package| package.has_library);
+        if !has_library
+            && !scope
+                .packages
+                .iter()
+                .any(|package| package.has_test_targets)
+        {
+            continue;
+        }
         let mut host = runner::cargo_command(&scope.cargo);
         host.arg("clippy");
         let names = add_packages(&mut host, scope.packages, |package| &package.host_id);
+        if has_library {
+            host.arg("--lib");
+        }
         host.args([
-            "--lib",
             "--tests",
             "--target",
             "host-tuple",

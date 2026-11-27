@@ -219,8 +219,8 @@ even if an executable from an earlier build still exists.
 Checks cover the firmware package and its configured, reachable local dependencies:
 
 - `fmt` runs `cargo fmt` and **rewrites source files**.
-- `lint` checks runtime libraries and binaries for the MCU, then selected libraries and tests
-  for the host. Both stages deny warnings.
+- `lint` checks runtime libraries and binaries for the MCU, then any selected libraries and
+  enabled test targets for the host. Both stages deny warnings.
 - `test` runs the selected packages' default host test targets and library doctests.
 - `verify` checks formatting without rewriting files, then runs all lint stages, then all test
   stages. It stops at the first failure. It does not build a release image.
@@ -363,12 +363,12 @@ colors and Unicode marks. `--color always` and `--color never` override automati
 | Configuration version missing or incompatible | Follow [configuration compatibility](configuration.md#configuration-compatibility); choose a compatible CLI or manually migrate the file |
 | A command fails on an unrelated platform | Fix each registered firmware's working directory and Cargo configuration; most project commands validate the whole registry |
 | Unexpected CPU or missing linker flags | Review [Cargo flag precedence](configuration.md#configure-the-firmware-target) for the firmware's working directory |
-| Package has no library target | Add a host-testable library to the firmware package |
+| Package has no binary targets | Register a package that declares a firmware binary |
 | Multiple binary targets | Set the firmware's `bin` to a declared binary; `default-run` does not select it for `plfw` |
 | Saved firmware removed or state malformed | Run `plfw select led-demo` to replace it, or `plfw select --clear` |
 | Unexpected release/dev image | Inspect saved profile with `info`; use an explicit profile or save a new selection |
 | ELF missing | Run the reported build command for that firmware and profile |
-| Host lint/test tries to compile hardware code | Separate host-testable library code and configure target-specific binary/test compilation |
+| Host lint/test tries to compile hardware code | Configure the package's [test targets and host compilation](configuration.md#prepare-the-cargo-project) |
 | A local dependency is missing from checks | Inspect `info --firmware led-demo` and canonical directory-glob matching |
 | `--locked` fails | Update and commit the owning workspace's lockfile with Cargo |
 | Probe missing or ambiguous | Check `plfw probes`, host permissions and the explicit `--probe` selector |
