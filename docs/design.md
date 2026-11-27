@@ -117,12 +117,18 @@ artifact target names.
 `scope` traverses selected firmware's full Cargo metadata rather than scanning directories.
 Canonical manifests identify packages, keeping identical package names in different owners distinct.
 
-1. Traverse normal, build and dev edges across Cargo's resolved platforms/features.
+1. Start with Cargo's resolved graph using workspace default features. Follow normal edges whose
+   target conditions match the depending package's compilation role. Build and dev edges match
+   the host. After an incoming edge matches, a proc macro uses the host for its own dependencies.
 2. Select reachable local path packages matching config.local-dependencies; always select firmware,
    keep traversing excluded packages, and exclude registry/Git sources from explicit checks.
-3. Seed local dependencies' host traversal in their own owning context to include test helpers.
-4. Normal edges preserve compilation role; build/dev edges and proc macros switch to host.
-   A package reached in both roles receives both checks.
+3. Seed each selected package's host traversal in its owning context to include its own test
+   helpers. MCU runtime packages receive target-side Clippy as well as their own host checks.
+
+Cargo evaluates named targets and `cfg(...)` conditions for the firmware target and
+`host-tuple` from the command's working directory. The planner uses a temporary metadata
+workspace with one path dependency per condition so that Cargo can evaluate each condition
+independently.
 
 The metadata cache retains the Cargo execution context. To discover an external
 dependency's owner, run `cargo locate-project --workspace` from the working directory that supplied

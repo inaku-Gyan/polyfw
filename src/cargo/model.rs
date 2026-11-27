@@ -74,6 +74,7 @@ pub(crate) struct MetadataDependency {
 #[derive(Debug, Deserialize)]
 pub(crate) struct MetadataDependencyKind {
     pub(crate) kind: Option<DependencyKind>,
+    pub(crate) target: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

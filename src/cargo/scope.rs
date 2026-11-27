@@ -6,6 +6,7 @@ use super::context::{cargo_metadata_for, same_context, unique_contexts};
 use super::model::{
     CargoContext, DependencyKind, Metadata, MetadataPackage, MetadataTarget, Selection,
 };
+use super::platforms::PlatformConditions;
 use super::runner;
 use crate::InternalResult as Result;
 use crate::config::local_dependencies::LocalDependencies;
@@ -79,6 +80,7 @@ type MetadataKey = (CargoContext, Option<String>);
 struct WorkspaceMetadata {
     working_dir: PathBuf,
     data: Metadata,
+    platforms: PlatformConditions,
 }
 
 struct Resolver {
@@ -142,9 +144,11 @@ impl Resolver {
                     .insert(manifest, (owner.clone(), package.id.clone()));
             }
         }
+        let platforms = PlatformConditions::load(cargo, &data, target)?;
         let metadata = Rc::new(WorkspaceMetadata {
             working_dir: cargo.working_dir.clone(),
             data,
+            platforms,
         });
         self.metadata.insert(key, Rc::clone(&metadata));
         Ok(metadata)
@@ -307,7 +311,17 @@ impl Resolver {
                             CompilationTarget::Host
                         }
                     };
-                    pending.push((Rc::clone(&metadata), dependency.pkg.clone(), role));
+                    let conditions = match role {
+                        CompilationTarget::Embedded => metadata.platforms.firmware(),
+                        CompilationTarget::Host => &metadata.platforms.host,
+                    };
+                    if kind
+                        .target
+                        .as_ref()
+                        .is_none_or(|condition| conditions.contains(condition))
+                    {
+                        pending.push((Rc::clone(&metadata), dependency.pkg.clone(), role));
+                    }
                 }
             }
         }
@@ -397,6 +411,10 @@ mod tests {
             (
                 vec!["platform/test/common-b"],
                 vec!["firmware-a", "common-b"],
+            ),
+            (
+                vec!["platform/test/host-leaf"],
+                vec!["firmware-a", "host-leaf"],
             ),
         ] {
             fs::write(
@@ -921,7 +939,8 @@ mod tests {
         .unwrap();
         fs::write(
             workspace.join(".cargo/config.toml"),
-            "[build]\ntarget = \"thumbv7em-none-eabihf\"\n",
+            "[build]\ntarget = \"thumbv7em-none-eabihf\"\n\
+             [target.thumbv7em-none-eabihf]\nrustflags = [\"--cfg\", \"polyfw_scope_mcu\"]\n",
         )
         .unwrap();
         let library = "#![no_std]\n#![forbid(unsafe_code)]\npub fn value() -> u8 { 0 }\n";
@@ -932,17 +951,26 @@ mod tests {
             (
                 "firmware-a",
                 "[dependencies]\noutside = { path = \"../../../shared/outside\" }\n\
-                 macro-helper = { path = \"../macro-helper\" }\n\
                  mixed = { path = \"../mixed\" }\n\
-                 [target.'cfg(target_os = \"none\")'.dependencies]\n\
+                 [target.'cfg(all(target_os = \"none\", polyfw_scope_mcu))'.dependencies]\n\
                  drivers = { package = \"common-a\", path = \"../common-a\" }\n\
+                 macro-helper = { path = \"../macro-helper\" }\n\
+                 [target.'cfg(not(target_os = \"none\"))'.dependencies]\n\
+                 build-helper = { path = \"../build-helper\" }\n\
                  [build-dependencies]\nbuild-helper = { path = \"../build-helper\" }\n\
-                 [dev-dependencies]\ndev-helper = { path = \"../dev-helper\" }\n",
+                 [target.'cfg(target_os = \"none\")'.build-dependencies]\n\
+                 unused = { path = \"../unused\" }\n\
+                 [target.'cfg(target_os = \"none\")'.dev-dependencies]\n\
+                 unused = { path = \"../unused\" }\n\
+                 [target.'cfg(not(target_os = \"none\"))'.dev-dependencies]\n\
+                 dev-helper = { path = \"../dev-helper\" }\n",
                 "#![no_std]\n#![forbid(unsafe_code)]\n\
                  pub fn value() -> u8 {\n\
-                 let value = mixed::value() + outside::value();\n\
-                 #[cfg(target_os = \"none\")]\nlet value = value + drivers::value();\n\
-                 macro_helper::noop!(value)\n}\n",
+                 mixed::value() + outside::value() + platform_value()\n}\n\
+                 #[cfg(target_os = \"none\")]\n\
+                 fn platform_value() -> u8 { macro_helper::noop!(drivers::value()) }\n\
+                 #[cfg(not(target_os = \"none\"))]\n\
+                 fn platform_value() -> u8 { let _ = build_helper::value(); 0 }\n",
             ),
             (
                 "firmware-b",
@@ -962,20 +990,20 @@ mod tests {
             ("common-b", "", library),
             (
                 "build-helper",
-                "[dependencies]\nhost-leaf = { path = \"../host-leaf\" }\n",
-                "#![forbid(unsafe_code)]\npub fn value() -> String { host_leaf::host_value() }\n",
+                "",
+                "#![forbid(unsafe_code)]\npub fn value() -> String { String::new() }\n",
             ),
             (
                 "dev-helper",
-                "[dependencies]\nhost-leaf = { path = \"../host-leaf\" }\n\
-                 mixed = { path = \"../mixed\" }\n",
+                "[dependencies]\nmixed = { path = \"../mixed\" }\n",
                 "#![forbid(unsafe_code)]\npub fn value() -> String {\n\
-                 let _ = mixed::value();\nhost_leaf::host_value()\n}\n",
+                 let _ = mixed::value();\nString::new()\n}\n",
             ),
             (
                 "macro-helper",
                 "[lib]\nproc-macro = true\n\
-                 [dependencies]\nhost-leaf = { path = \"../host-leaf\" }\n",
+                 [target.'cfg(not(target_os = \"none\"))'.dependencies]\n\
+                 host-leaf = { path = \"../host-leaf\" }\n",
                 "#![forbid(unsafe_code)]\nextern crate proc_macro;\n\
                  #[proc_macro]\n\
                  pub fn noop(input: proc_macro::TokenStream) -> proc_macro::TokenStream {\n\
